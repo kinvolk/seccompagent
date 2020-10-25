@@ -1,1 +1,1 @@
-# seccompagent
+# Kinvolk Seccomp Agent

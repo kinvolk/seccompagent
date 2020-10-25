@@ -1,0 +1,119 @@
+#define _GNU_SOURCE
+#include <endian.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <grp.h>
+#include <sched.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <sys/ioctl.h>
+#include <sys/prctl.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#include <linux/limits.h>
+#include <linux/netlink.h>
+#include <linux/types.h>
+
+#define PANIC   "panic"
+#define FATAL   "fatal"
+#define ERROR   "error"
+#define WARNING "warning"
+#define INFO    "info"
+#define DEBUG   "debug"
+
+/*
+ * Use the raw syscall for versions of glibc which don't include a function for
+ * it, namely (glibc 2.12).
+ */
+#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 14
+#	define _GNU_SOURCE
+#	include "syscall.h"
+#	if !defined(SYS_setns) && defined(__NR_setns)
+#		define SYS_setns __NR_setns
+#	endif
+
+#ifndef SYS_setns
+#	error "setns(2) syscall not supported by glibc version"
+#endif
+
+int setns(int fd, int nstype)
+{
+	return syscall(SYS_setns, fd, nstype);
+}
+#endif
+
+static void write_log_with_info(const char *level, const char *function, int line, const char *format, ...)
+{
+	char message[1024] = {};
+
+	va_list args;
+
+	if (level == NULL)
+		return;
+
+	va_start(args, format);
+	if (vsnprintf(message, sizeof(message), format, args) < 0)
+		goto done;
+
+	printf("{\"level\":\"%s\", \"msg\": \"%s:%d %s\"}\n", level, function, line, message);
+done:
+	va_end(args);
+}
+
+#define write_log(level, fmt, ...) \
+	write_log_with_info((level), __FUNCTION__, __LINE__, (fmt), ##__VA_ARGS__)
+
+#define bail(fmt, ...)                                       \
+	do {                                                       \
+		write_log(FATAL, "nsenter: " fmt ": %m", ##__VA_ARGS__); \
+		exit(1);                                                 \
+	} while(0)
+
+void join_mntns(char *path)
+{
+	int fd;
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0)
+		bail("failed to open %s", path);
+
+	if (setns(fd, CLONE_NEWNS) < 0)
+		bail("failed to setns to %s", path);
+
+	close(fd);
+}
+
+void nsexec(void)
+{
+	char *in_init = getenv("_LIBNSENTER_INIT");
+	if (in_init == NULL || *in_init == '\0')
+		return;
+
+	write_log(DEBUG, "nsexec started");
+
+	/*
+	 * Make the process non-dumpable, to avoid various race conditions that
+	 * could cause processes in namespaces we're joining to access host
+	 * resources (or potentially execute code).
+	 */
+	if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) < 0)
+		bail("failed to set process as non-dumpable");
+
+	/* For debugging. */
+	prctl(PR_SET_NAME, (unsigned long)"seccompagent:[CHILD]", 0, 0, 0);
+	join_mntns(getenv("_LIBNSENTER_MNTNSPATH"));
+
+	/* Finish executing, let the Go runtime take over. */
+	return;
+}
