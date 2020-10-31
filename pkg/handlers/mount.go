@@ -1,5 +1,5 @@
 // +build linux,cgo
-package main
+package handlers
 
 import (
 	"encoding/json"
@@ -9,10 +9,10 @@ import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
+	"github.com/kinvolk/seccompagent/pkg/readarg"
 )
 
-type MountModule struct {
-}
+var _ = nsenter.RegisterModule("mount", runMountInNamespaces)
 
 type mountModuleParams struct {
 	Module     string `json:"module,omitempty"`
@@ -21,9 +21,7 @@ type mountModuleParams struct {
 	Filesystem string `json:"filesystem,omitempty"`
 }
 
-func (m *MountModule) Run(param []byte) {
-	fmt.Printf("Run param: %s\n", param)
-
+func runMountInNamespaces(param []byte) {
 	var params mountModuleParams
 	err := json.Unmarshal(param, &params)
 	if err != nil {
@@ -38,18 +36,21 @@ func (m *MountModule) Run(param []byte) {
 	}
 }
 
-func handleMount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32) {
-	source, err := readArgString(req.Pid, int64(req.Data.Args[0]))
+func Mount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32) {
+	errVal = int32(syscall.ENOSYS)
+	val = ^uint64(0) // -1
+
+	source, err := readarg.ReadString(req.Pid, int64(req.Data.Args[0]))
 	if err != nil {
 		fmt.Printf("Cannot read argument: %s", err)
 		return 0, 0, libseccomp.NotifRespFlagContinue
 	}
-	dest, err := readArgString(req.Pid, int64(req.Data.Args[1]))
+	dest, err := readarg.ReadString(req.Pid, int64(req.Data.Args[1]))
 	if err != nil {
 		fmt.Printf("Cannot read argument: %s", err)
 		return 0, 0, libseccomp.NotifRespFlagContinue
 	}
-	filesystem, err := readArgString(req.Pid, int64(req.Data.Args[2]))
+	filesystem, err := readarg.ReadString(req.Pid, int64(req.Data.Args[2]))
 	if err != nil {
 		fmt.Printf("Cannot read argument: %s", err)
 		return 0, 0, libseccomp.NotifRespFlagContinue
@@ -70,11 +71,7 @@ func handleMount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags 
 		fmt.Printf("Run returned: %s", err)
 	}
 
-	errVal = int32(syscall.ENOMEDIUM)
-	val = ^uint64(0) // -1
+	errVal = 0
+	val = 0
 	return
-}
-
-func init() {
-	nsenter.Modules["mount"] = &MountModule{}
 }

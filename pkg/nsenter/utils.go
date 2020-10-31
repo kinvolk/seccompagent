@@ -10,37 +10,30 @@ import (
 	"os/exec"
 )
 
-const stdioFdCount = 3
-
-func Run(mntnspath string, i interface{}) error {
-	fmt.Printf("Run.\n")
-
-	b, err := json.Marshal(i)
-	if err != nil {
-		return fmt.Errorf("Unable to encode interface: %s", err)
-	}
-
-	cmd := exec.Command("/proc/self/exe", "-init")
-	cmd.Env = append(cmd.Env, "_LIBNSENTER_INIT=1")
-	cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSPATH="+mntnspath)
-	cmd.Env = append(cmd.Env, "_LIBNSENTER_COMMAND="+base64.StdEncoding.EncodeToString(b))
-
-	stdoutStderr, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("Unable to start the init command: %s\n%s\n", err, stdoutStderr)
-	}
-	fmt.Printf("init command returned: %s\n", stdoutStderr)
-
-	return nil
-}
-
 type Module interface {
 	Run([]byte)
 }
 
-var Modules map[string]Module = map[string]Module{}
+type RunFunc func([]byte)
 
-func ResumeRun() {
+var modules map[string]RunFunc
+
+func RegisterModule(name string, f RunFunc) bool {
+	if modules == nil {
+		modules = map[string]RunFunc{}
+	}
+	modules[name] = f
+	return true
+}
+
+// Init checks if the process has re-executed itself and must run a registered
+// module. Init() needs to be called explicitely from main() to ensure it is
+// called after all other init() functions.
+func Init() {
+	if len(os.Args) < 2 || os.Args[1] != "-init" {
+		return
+	}
+
 	defer os.Exit(0)
 
 	str := os.Getenv("_LIBNSENTER_COMMAND")
@@ -65,7 +58,33 @@ func ResumeRun() {
 		return
 	}
 	fmt.Printf("%+v\n", m)
-	fmt.Printf("type: %T\n", Modules[m.Module])
 
-	Modules[m.Module].Run(jsonBlob)
+	f, ok := modules[m.Module]
+	if !ok {
+		fmt.Printf("error: module %q not registered\n", m.Module)
+		return
+	}
+	f(jsonBlob)
+}
+
+func Run(mntnspath string, i interface{}) error {
+	fmt.Printf("Run.\n")
+
+	b, err := json.Marshal(i)
+	if err != nil {
+		return fmt.Errorf("Unable to encode interface: %s", err)
+	}
+
+	cmd := exec.Command("/proc/self/exe", "-init")
+	cmd.Env = append(cmd.Env, "_LIBNSENTER_INIT=1")
+	cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSPATH="+mntnspath)
+	cmd.Env = append(cmd.Env, "_LIBNSENTER_COMMAND="+base64.StdEncoding.EncodeToString(b))
+
+	stdoutStderr, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Unable to start the init command: %s\n%s\n", err, stdoutStderr)
+	}
+	fmt.Printf("init command returned:\n<<<\n%s\n>>>\n", stdoutStderr)
+
+	return nil
 }
