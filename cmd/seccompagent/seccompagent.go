@@ -13,18 +13,21 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/kinvolk/seccompagent/pkg/handlers"
+	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/ocihook"
 )
 
 var (
-	socketFile string
-	hookParam  bool
+	socketFile    string
+	hookParam     bool
+	resolverParam string
 )
 
 func init() {
 	flag.StringVar(&socketFile, "socketfile", "/run/seccomp-agent.socket", "Socket file")
 	flag.BoolVar(&hookParam, "hook", false, "Run as OCI hook")
+	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes]")
 }
 
 func main() {
@@ -41,36 +44,56 @@ func main() {
 		return
 	}
 
-	// Using the resolver allows to implement different behaviour
-	// depending on the container. For example, you could connect to the
-	// Kubernetes API, find the pod, and allow or deny a syscall depending
-	// on the pod specifications (e.g. namespace, annotations,
-	// serviceAccount).
-	resolver := func(state []byte) *registry.Registry {
-		r := registry.New()
+	var resolver registry.ResolverFunc
 
-		re := regexp.MustCompile(`"pid":([0-9]*),`)
-		found := re.FindStringSubmatch(string(state))
-		pid := found[1]
+	switch resolverParam {
+	case "none", "":
+		resolver = nil
+	case "demo-basic":
+		// Using the resolver allows to implement different behaviour
+		// depending on the container. For example, you could connect to the
+		// Kubernetes API, find the pod, and allow or deny a syscall depending
+		// on the pod specifications (e.g. namespace, annotations,
+		// serviceAccount).
+		resolver = func(state []byte) *registry.Registry {
+			r := registry.New()
 
-		// Example:
-		// 	/ # mount -t proc proc root
-		// 	/ # ls /root/self/cmdline
-		// 	/root/self/cmdline
-		r.Add("mount", handlers.Mount)
+			re := regexp.MustCompile(`"pid":([0-9]*),`)
+			found := re.FindStringSubmatch(string(state))
+			pid := found[1]
 
-		// Example:
-		// 	# chmod 777 /
-		// 	chmod: /: Bad message
-		r.Add("chmod", handlers.Error(syscall.EBADMSG))
+			// Example:
+			// 	/ # mount -t proc proc root
+			// 	/ # ls /root/self/cmdline
+			// 	/root/self/cmdline
+			r.Add("mount", handlers.Mount)
 
-		// Example:
-		// 	# mkdir /abc
-		// 	# ls -d /abc*
-		// 	/abc-pid-3528098
-		r.Add("mkdir", handlers.MkdirWithSuffix("-pid-"+pid))
+			// Example:
+			// 	# chmod 777 /
+			// 	chmod: /: Bad message
+			r.Add("chmod", handlers.Error(syscall.EBADMSG))
 
-		return r
+			// Example:
+			// 	# mkdir /abc
+			// 	# ls -d /abc*
+			// 	/abc-pid-3528098
+			r.Add("mkdir", handlers.MkdirWithSuffix("-pid-"+pid))
+
+			return r
+		}
+	case "kubernetes":
+		kubeResolverFunc := func(namespace string, podname string) *registry.Registry {
+			r := registry.New()
+			r.Add("mkdir", handlers.MkdirWithSuffix("-"+namespace+"-"+podname))
+			return r
+		}
+		var err error
+		resolver, err = kuberesolver.KubeResolver(kubeResolverFunc)
+		if err != nil {
+			panic(err)
+		}
+	default:
+		panic(errors.New("invalid container resolver"))
 	}
 
 	err := agent.StartAgent(socketFile, resolver)

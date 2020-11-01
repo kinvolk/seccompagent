@@ -10,6 +10,8 @@ type Registry struct {
 	SyscallHandler map[string]HandlerFunc
 }
 
+type ResolverFunc func(state []byte) *Registry
+
 func New() *Registry {
 	return &Registry{
 		SyscallHandler: map[string]HandlerFunc{},

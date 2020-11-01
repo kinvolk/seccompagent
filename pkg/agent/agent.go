@@ -14,9 +14,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 )
 
-type ResolverFunc func(state []byte) *registry.Registry
-
-func receiveNewSeccompFd(resolver ResolverFunc, sockfd int) (*registry.Registry, *os.File, error) {
+func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.Registry, *os.File, error) {
 	MaxNameLen := 4096
 	oobSpace := unix.CmsgSpace(4)
 	stateBuf := make([]byte, 4096)
@@ -111,7 +109,7 @@ func notifHandler(reg *registry.Registry, fd libseccomp.ScmpFd) {
 	}
 }
 
-func StartAgent(socketFile string, resolver ResolverFunc) error {
+func StartAgent(socketFile string, resolver registry.ResolverFunc) error {
 	if err := os.RemoveAll(socketFile); err != nil {
 		return err
 	}

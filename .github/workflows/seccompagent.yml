@@ -1,0 +1,27 @@
+name: Compile Kinvolk Seccomp Agent
+on:
+  push:
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code
+      uses: actions/checkout@v1
+
+    - name: Build gadget container and publish to Registry
+      id: publish-registry
+      uses: elgohr/Publish-Docker-Github-Action@2.8
+      with:
+        # name: quay.io/kinvolk/seccompagent
+        name: ${{ secrets.CONTAINER_REPO }}
+        username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+        password: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+        registry: quay.io
+        workdir: .
+        dockerfile: Dockerfile
+        snapshot: true
+        cache: ${{ github.event_name != 'schedule' }}
