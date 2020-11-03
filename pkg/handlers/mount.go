@@ -41,6 +41,9 @@ func Mount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32
 	errVal = int32(syscall.ENOSYS)
 	val = ^uint64(0) // -1
 
+	// TODO: open /proc/pid/mem only one time and call
+	// libseccomp.NotifIDValid() after.
+
 	source, err := readarg.ReadString(req.Pid, int64(req.Data.Args[0]))
 	if err != nil {
 		fmt.Printf("Cannot read argument: %s", err)
@@ -67,6 +70,10 @@ func Mount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32
 		Dest:       dest,
 		Filesystem: filesystem,
 	}
+
+	// TODO: open /proc/pid/ns/mnt separately so we can call
+	// libseccomp.NotifIDValid() between the open and the nsenter.
+
 	err = nsenter.Run(fmt.Sprintf("/proc/%d/ns/mnt", req.Pid), params)
 	if err != nil {
 		fmt.Printf("Run returned: %s", err)

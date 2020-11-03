@@ -28,11 +28,17 @@ func Error(err error) registry.HandlerFunc {
 
 func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 	return func(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32) {
+		// TODO: open /proc/pid/mem only one time and call
+		// libseccomp.NotifIDValid() after.
+
 		fileName, err := readarg.ReadString(req.Pid, int64(req.Data.Args[0]))
 		if err != nil {
 			fmt.Printf("Cannot read argument: %s", err)
 			return int32(syscall.ENOMEDIUM), ^uint64(0), 0
 		}
+
+		// TODO: use mkdirat() with /proc/pid/{root,cwd} opened separately, so we
+		// can use libseccomp.NotifIDValid() between the open and the mkdirat.
 
 		mode := uint32(req.Data.Args[1])
 		if strings.HasPrefix(fileName, "/") {
