@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"text/template"
+	"time"
 
 	"github.com/kinvolk/seccompagent/pkg/agent"
 	"github.com/kinvolk/seccompagent/pkg/registry"
@@ -85,6 +86,8 @@ func main() {
 		}
 	case "kubernetes":
 		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) *registry.Registry {
+			fmt.Printf("Pod %+v\n", podCtx)
+			fmt.Printf("Metadata %+v\n", metadata)
 			r := registry.New()
 			if v, ok := metadata["MKDIR_TMPL"]; ok {
 				tmpl, err := template.New("mkdirTmpl").Parse(v)
@@ -94,6 +97,13 @@ func main() {
 					if err == nil {
 						r.Add("mkdir", handlers.MkdirWithSuffix(suffix.String()))
 					}
+				}
+			}
+			if fileName, ok := metadata["EXEC_PATTERN"]; ok {
+				d, ok := metadata["EXEC_DURATION"]
+				if ok {
+					duration, _ := time.ParseDuration(d)
+					r.Add("execve", handlers.ExecCondition(fileName, duration))
 				}
 			}
 			return r

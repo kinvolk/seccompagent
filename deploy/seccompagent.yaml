@@ -44,8 +44,12 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        #securityContext:
-        #  privileged: true
+        securityContext:
+          capabilities:
+            # CAP_SYS_PTRACE is useful to read arguments of a processes with
+            # the prctl PR_SET_DUMPABLE bit set to zero.
+            add: ["SYS_PTRACE"]
+          # privileged: true
         volumeMounts:
         - name: seccomp-policies
           mountPath: /host/seccomp

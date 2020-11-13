@@ -37,18 +37,9 @@ func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot parse OCI state: %v\n", err)
 	}
-	fmt.Printf("%s\n", stateBuf)
-	fmt.Printf("%v\n", containerProcessState)
-	fmt.Printf("%v\n", containerProcessState.Metadata)
-
 	seccompFdIndex, ok := containerProcessState.FdIndexes["seccompFd"]
 	if !ok || seccompFdIndex < 0 {
 		return nil, nil, fmt.Errorf("recvfd: didn't receive seccomp fd")
-	}
-
-	var reg *registry.Registry
-	if resolver != nil {
-		reg = resolver(containerProcessState)
 	}
 
 	scms, err := unix.ParseSocketControlMessage(oob)
@@ -69,10 +60,22 @@ func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.
 	}
 	fd := uintptr(fds[seccompFdIndex])
 
+	fmt.Printf("New seccomp filter (fd#%d): ID: %v Pid: %v Pid1: %v Annotations: %v\n",
+		fd,
+		containerProcessState.State.ID,
+		containerProcessState.Pid,
+		containerProcessState.State.Pid,
+		containerProcessState.State.Annotations)
+
 	for i := 0; i < len(fds); i++ {
 		if i != seccompFdIndex {
 			unix.Close(fds[i])
 		}
+	}
+
+	var reg *registry.Registry
+	if resolver != nil {
+		reg = resolver(containerProcessState)
 	}
 
 	return reg, os.NewFile(fd, "seccomp-fd"), nil
@@ -84,19 +87,19 @@ func notifHandler(reg *registry.Registry, fd libseccomp.ScmpFd) {
 	for {
 		req, err := libseccomp.NotifReceive(fd)
 		if err != nil {
-			fmt.Printf("Error in NotifReceive(): %s", err)
+			fmt.Printf("Error in NotifReceive(): %s\n", err)
 			return
 		}
 		syscallName, err := req.Data.Syscall.GetName()
 		if err != nil {
-			fmt.Printf("Error in decoding syscall %v(): %s", req.Data.Syscall, err)
+			fmt.Printf("Error in decoding syscall %v(): %s\n", req.Data.Syscall, err)
 			return
 		}
-		fmt.Printf("Received syscall %q, pid %v, arch %q, args %+v\n", syscallName, req.Pid, req.Data.Arch, req.Data.Args)
+		fmt.Printf("Seccomp fd#%d: received syscall %q, pid %v, arch %q, args %+v\n", fd, syscallName, req.Pid, req.Data.Arch, req.Data.Args)
 
 		// TOCTOU check
 		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
-			fmt.Printf("TOCTOU check failed: req.ID is no longer valid: %s", err)
+			fmt.Printf("TOCTOU check failed: req.ID is no longer valid: %s\n", err)
 			continue
 		}
 
@@ -115,7 +118,7 @@ func notifHandler(reg *registry.Registry, fd libseccomp.ScmpFd) {
 		}
 
 		if err = libseccomp.NotifRespond(fd, resp); err != nil {
-			fmt.Printf("Error in notification response: %s", err)
+			fmt.Printf("Error in notification response: %s\n", err)
 			return
 		}
 	}
@@ -149,7 +152,6 @@ func StartAgent(socketFile string, resolver registry.ResolverFunc) error {
 		}
 		socket.Close()
 
-		fmt.Printf("Received new seccomp fd: %v\n", newFd.Fd())
 		go notifHandler(reg, libseccomp.ScmpFd(newFd.Fd()))
 	}
 
