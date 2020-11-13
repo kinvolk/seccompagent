@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"syscall"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
@@ -91,6 +92,10 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 	for {
 		req, err := libseccomp.NotifReceive(fd)
 		if err != nil {
+			if err == syscall.ENOENT {
+				fmt.Printf("Seccomp fd#%d: handling of new notification could not start\n", fd)
+				continue
+			}
 			fmt.Printf("Error in NotifReceive(): %s\n", err)
 			return
 		}
@@ -126,6 +131,10 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 		}
 
 		if err = libseccomp.NotifRespond(fd, resp); err != nil {
+			if err == syscall.ENOENT {
+				fmt.Printf("Seccomp fd#%d: handling of %s could not be finished\n", fd, syscallName)
+				continue
+			}
 			fmt.Printf("Error in notification response: %s\n", err)
 			return
 		}
