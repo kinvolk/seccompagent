@@ -67,7 +67,14 @@ func Init() {
 	f(jsonBlob)
 }
 
-func Run(mntnspath string, i interface{}) error {
+// OpenNamespaces opens a namespace file. It is done separately to Run() so
+// that the caller can call libseccomp.NotifIDValid() in between.
+func OpenNamespace(nspath string) (*os.File, error) {
+	return os.OpenFile(nspath, os.O_RDONLY, 0)
+}
+
+// Run executes a module in other namespaces
+func Run(mntns *os.File, i interface{}) error {
 	fmt.Printf("Run.\n")
 
 	b, err := json.Marshal(i)
@@ -77,7 +84,10 @@ func Run(mntnspath string, i interface{}) error {
 
 	cmd := exec.Command("/proc/self/exe", "-init")
 	cmd.Env = append(cmd.Env, "_LIBNSENTER_INIT=1")
-	cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSPATH="+mntnspath)
+	if mntns != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, mntns)
+		cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSPATH=/proc/self/fd/3")
+	}
 	cmd.Env = append(cmd.Env, "_LIBNSENTER_COMMAND="+base64.StdEncoding.EncodeToString(b))
 
 	stdoutStderr, err := cmd.CombinedOutput()

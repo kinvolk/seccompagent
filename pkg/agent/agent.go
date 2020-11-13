@@ -97,9 +97,8 @@ func notifHandler(reg *registry.Registry, fd libseccomp.ScmpFd) {
 		}
 		fmt.Printf("Seccomp fd#%d: received syscall %q, pid %v, arch %q, args %+v\n", fd, syscallName, req.Pid, req.Data.Arch, req.Data.Args)
 
-		// TOCTOU check
 		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
-			fmt.Printf("TOCTOU check failed: req.ID is no longer valid: %s\n", err)
+			fmt.Printf("Seccomp fd#%d: notification no longer valid: %s\n", fd, err)
 			continue
 		}
 
@@ -113,7 +112,12 @@ func notifHandler(reg *registry.Registry, fd libseccomp.ScmpFd) {
 		if reg != nil {
 			handler, ok := reg.SyscallHandler[syscallName]
 			if ok {
-				resp.Error, resp.Val, resp.Flags = handler(req)
+				var intr bool
+				intr, resp.Error, resp.Val, resp.Flags = handler(fd, req)
+				if intr {
+					fmt.Printf("Seccomp fd#%d: handling of %s was interrupted\n", fd, syscallName)
+					continue
+				}
 			}
 		}
 

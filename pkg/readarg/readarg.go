@@ -4,25 +4,25 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"syscall"
 )
 
-func ReadString(pid uint32, offset int64) (string, error) {
+// OpenMem opens the memory file for the target process. It is done separately,
+// so that the caller can call libseccomp.NotifIDValid() in between.
+func OpenMem(pid uint32) (*os.File, error) {
 	if pid == 0 {
 		// This can happen if the seccomp agent is in a pid namespace
 		// where the target pid is not mapped.
-		return "", errors.New("unknown pid")
+		return nil, errors.New("unknown pid")
 	}
+	return os.OpenFile(fmt.Sprintf("/proc/%d/mem", pid), os.O_RDONLY, 0)
+}
 
+func ReadString(memFile *os.File, offset int64) (string, error) {
 	var buffer = make([]byte, 4096) // PATH_MAX
 
-	memfd, err := syscall.Open(fmt.Sprintf("/proc/%d/mem", pid), syscall.O_RDONLY, 0777)
-	if err != nil {
-		return "", err
-	}
-	defer syscall.Close(memfd)
-
-	_, err = syscall.Pread(memfd, buffer, offset)
+	_, err := syscall.Pread(int(memFile.Fd()), buffer, offset)
 	if err != nil {
 		return "", err
 	}

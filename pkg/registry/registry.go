@@ -5,7 +5,7 @@ import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 )
 
-type HandlerFunc func(*libseccomp.ScmpNotifReq) (int32, uint64, uint32)
+type HandlerFunc func(libseccomp.ScmpFd, *libseccomp.ScmpNotifReq) (bool, int32, uint64, uint32)
 
 type Registry struct {
 	SyscallHandler map[string]HandlerFunc

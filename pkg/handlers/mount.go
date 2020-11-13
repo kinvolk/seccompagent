@@ -37,27 +37,34 @@ func runMountInNamespaces(param []byte) {
 	}
 }
 
-func Mount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32) {
+func Mount(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (intr bool, errVal int32, val uint64, flags uint32) {
 	errVal = int32(syscall.ENOSYS)
 	val = ^uint64(0) // -1
 
-	// TODO: open /proc/pid/mem only one time and call
-	// libseccomp.NotifIDValid() after.
+	memFile, err := readarg.OpenMem(req.Pid)
+	if err != nil {
+		return false, 0, 0, libseccomp.NotifRespFlagContinue
+	}
+	defer memFile.Close()
 
-	source, err := readarg.ReadString(req.Pid, int64(req.Data.Args[0]))
-	if err != nil {
-		fmt.Printf("Cannot read argument: %s", err)
-		return 0, 0, libseccomp.NotifRespFlagContinue
+	if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		return true, 0, 0, 0
 	}
-	dest, err := readarg.ReadString(req.Pid, int64(req.Data.Args[1]))
+
+	source, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 	if err != nil {
 		fmt.Printf("Cannot read argument: %s", err)
-		return 0, 0, libseccomp.NotifRespFlagContinue
+		return false, 0, 0, libseccomp.NotifRespFlagContinue
 	}
-	filesystem, err := readarg.ReadString(req.Pid, int64(req.Data.Args[2]))
+	dest, err := readarg.ReadString(memFile, int64(req.Data.Args[1]))
 	if err != nil {
 		fmt.Printf("Cannot read argument: %s", err)
-		return 0, 0, libseccomp.NotifRespFlagContinue
+		return false, 0, 0, libseccomp.NotifRespFlagContinue
+	}
+	filesystem, err := readarg.ReadString(memFile, int64(req.Data.Args[2]))
+	if err != nil {
+		fmt.Printf("Cannot read argument: %s", err)
+		return false, 0, 0, libseccomp.NotifRespFlagContinue
 	}
 	if filesystem == "proc" {
 	}
@@ -71,14 +78,23 @@ func Mount(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32
 		Filesystem: filesystem,
 	}
 
-	// TODO: open /proc/pid/ns/mnt separately so we can call
-	// libseccomp.NotifIDValid() between the open and the nsenter.
+	mntns, err := nsenter.OpenNamespace(fmt.Sprintf("/proc/%d/ns/mnt", req.Pid))
+	if err != nil {
+		fmt.Printf("Cannot open namespace: %s", err)
+		return false, 0, 0, libseccomp.NotifRespFlagContinue
+	}
 
-	err = nsenter.Run(fmt.Sprintf("/proc/%d/ns/mnt", req.Pid), params)
+	if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		fmt.Printf("TOCTOU check failed: req.ID is no longer valid: %s\n", err)
+		return true, 0, 0, 0
+	}
+
+	err = nsenter.Run(mntns, params)
 	if err != nil {
 		fmt.Printf("Run returned: %s", err)
 	}
 
+	intr = false
 	errVal = 0
 	val = 0
 	return

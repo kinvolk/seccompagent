@@ -12,18 +12,25 @@ import (
 )
 
 func ExecCondition(filePattern string, duration time.Duration) registry.HandlerFunc {
-	return func(req *libseccomp.ScmpNotifReq) (errVal int32, val uint64, flags uint32) {
-		// TODO: open /proc/pid/mem only one time and call
-		// libseccomp.NotifIDValid() after.
+	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (intr bool, errVal int32, val uint64, flags uint32) {
+		memFile, err := readarg.OpenMem(req.Pid)
+		if err != nil {
+			return false, 0, 0, libseccomp.NotifRespFlagContinue
+		}
+		defer memFile.Close()
 
-		fileName, err := readarg.ReadString(req.Pid, int64(req.Data.Args[0]))
+		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+			return true, 0, 0, 0
+		}
+
+		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			if os.IsPermission(err) {
 				// Probably because of prctl(PR_SET_DUMPABLE) in runc-init
-				return 0, 0, libseccomp.NotifRespFlagContinue
+				return false, 0, 0, libseccomp.NotifRespFlagContinue
 			}
 			fmt.Printf("Cannot read argument: %s\n", err)
-			return 0, 0, libseccomp.NotifRespFlagContinue
+			return false, 0, 0, libseccomp.NotifRespFlagContinue
 		}
 
 		if fileName == filePattern {
@@ -32,6 +39,6 @@ func ExecCondition(filePattern string, duration time.Duration) registry.HandlerF
 		} else {
 			fmt.Printf("execve(%q)\n", fileName)
 		}
-		return 0, 0, libseccomp.NotifRespFlagContinue
+		return false, 0, 0, libseccomp.NotifRespFlagContinue
 	}
 }
