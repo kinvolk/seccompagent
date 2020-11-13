@@ -54,7 +54,7 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 				return false, int32(syscall.ENOMEDIUM), ^uint64(0), 0
 			}
 		} else {
-			err := syscall.Mkdir(fmt.Sprintf("/proc/%d/cwd/%s-boo", req.Pid, fileName), mode)
+			err := syscall.Mkdir(fmt.Sprintf("/proc/%d/cwd/%s%s", req.Pid, fileName, suffix), mode)
 			if err != nil {
 				return false, int32(syscall.ENOMEDIUM), ^uint64(0), 0
 			}
