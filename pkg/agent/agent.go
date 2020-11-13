@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"syscall"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
@@ -14,7 +13,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 )
 
-func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.Registry, *os.File, error) {
+func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registry.Registry, *os.File, error) {
 	MaxNameLen := 4096
 	oobSpace := unix.CmsgSpace(4)
 	stateBuf := make([]byte, 4096)
@@ -82,8 +81,13 @@ func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.
 }
 
 // notifHandler handles seccomp notifications and responses
-func notifHandler(reg *registry.Registry, fd libseccomp.ScmpFd) {
-	defer syscall.Close(int(fd))
+func notifHandler(reg *registry.Registry, seccompFile *os.File) {
+	fd := libseccomp.ScmpFd(seccompFile.Fd())
+	defer func() {
+		fmt.Printf("Seccomp fd#%d: Closing\n", fd)
+		seccompFile.Close()
+	}()
+
 	for {
 		req, err := libseccomp.NotifReceive(fd)
 		if err != nil {
@@ -150,13 +154,13 @@ func StartAgent(socketFile string, resolver registry.ResolverFunc) error {
 			return fmt.Errorf("cannot get socket: %v\n", err)
 		}
 
-		reg, newFd, err := receiveNewSeccompFd(resolver, int(socket.Fd()))
+		reg, newSeccompFile, err := receiveNewSeccompFile(resolver, int(socket.Fd()))
 		if err != nil {
 			fmt.Printf("%s\n", err)
 		}
 		socket.Close()
 
-		go notifHandler(reg, libseccomp.ScmpFd(newFd.Fd()))
+		go notifHandler(reg, newSeccompFile)
 	}
 
 }
