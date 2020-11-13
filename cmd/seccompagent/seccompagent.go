@@ -5,9 +5,11 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
-	"regexp"
+	"strings"
 	"syscall"
+	"text/template"
 
 	"github.com/kinvolk/seccompagent/pkg/agent"
 	"github.com/kinvolk/seccompagent/pkg/registry"
@@ -16,6 +18,8 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/ocihook"
+
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 var (
@@ -55,12 +59,8 @@ func main() {
 		// Kubernetes API, find the pod, and allow or deny a syscall depending
 		// on the pod specifications (e.g. namespace, annotations,
 		// serviceAccount).
-		resolver = func(state []byte) *registry.Registry {
+		resolver = func(state *specs.ContainerProcessState) *registry.Registry {
 			r := registry.New()
-
-			re := regexp.MustCompile(`"pid":([0-9]*),`)
-			found := re.FindStringSubmatch(string(state))
-			pid := found[1]
 
 			// Example:
 			// 	/ # mount -t proc proc root
@@ -77,14 +77,25 @@ func main() {
 			// 	# mkdir /abc
 			// 	# ls -d /abc*
 			// 	/abc-pid-3528098
-			r.Add("mkdir", handlers.MkdirWithSuffix("-pid-"+pid))
+			if state != nil {
+				r.Add("mkdir", handlers.MkdirWithSuffix(fmt.Sprintf("-pid-%d", state.State.Pid)))
+			}
 
 			return r
 		}
 	case "kubernetes":
-		kubeResolverFunc := func(namespace string, podname string) *registry.Registry {
+		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) *registry.Registry {
 			r := registry.New()
-			r.Add("mkdir", handlers.MkdirWithSuffix("-"+namespace+"-"+podname))
+			if v, ok := metadata["MKDIR_TMPL"]; ok {
+				tmpl, err := template.New("mkdirTmpl").Parse(v)
+				if err == nil {
+					var suffix strings.Builder
+					err = tmpl.Execute(&suffix, podCtx)
+					if err == nil {
+						r.Add("mkdir", handlers.MkdirWithSuffix(suffix.String()))
+					}
+				}
+			}
 			return r
 		}
 		var err error

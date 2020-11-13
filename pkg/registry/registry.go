@@ -1,6 +1,7 @@
 package registry
 
 import (
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 )
 
@@ -10,7 +11,7 @@ type Registry struct {
 	SyscallHandler map[string]HandlerFunc
 }
 
-type ResolverFunc func(state []byte) *Registry
+type ResolverFunc func(state *specs.ContainerProcessState) *Registry
 
 func New() *Registry {
 	return &Registry{

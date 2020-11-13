@@ -1,3 +1,4 @@
+GO := go
 GO_BUILD := go build
 
 IMAGE_TAG=$(shell ./tools/image-tag)
@@ -17,6 +18,12 @@ container-build:
 container-push:
 	docker push $(CONTAINER_REPO):$(IMAGE_TAG)
 	docker push $(CONTAINER_REPO):$(IMAGE_BRANCH_TAG)
+
+.PHONY: vendor
+vendor:
+	$(GO) mod tidy
+	$(GO) mod vendor
+	$(GO) mod verify
 
 .PHONY: test
 test:

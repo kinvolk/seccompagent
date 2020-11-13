@@ -4,14 +4,40 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
-	"strconv"
+	"strings"
 
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver/k8s"
 	"github.com/kinvolk/seccompagent/pkg/registry"
+
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-type KubeResolverFunc func(namespace string, podname string) *registry.Registry
+type PodContext struct {
+	Namespace string
+	Pod       string
+	Container string
+}
+
+type KubeResolverFunc func(pod *PodContext, metadata map[string]string) *registry.Registry
+
+func parseKV(metadata string) map[string]string {
+	vars := map[string]string{}
+	varsArr := strings.Split(metadata, "\n")
+	for _, line := range varsArr {
+		idx := strings.Index(line, "=")
+		switch idx {
+		case -1:
+			vars[line] = ""
+		case 0:
+			// skip
+		default:
+			k := line[0:idx]
+			v := line[idx+1:]
+			vars[k] = v
+		}
+	}
+	return vars
+}
 
 func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 	nodeName := os.Getenv("NODE_NAME")
@@ -20,25 +46,19 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 		return nil, errors.New("cannot create kubernetes client")
 	}
 
-	re := regexp.MustCompile(`"pid":([0-9]*),`)
+	return func(state *specs.ContainerProcessState) *registry.Registry {
+		vars := parseKV(state.Metadata)
 
-	return func(state []byte) *registry.Registry {
-		found := re.FindStringSubmatch(string(state))
-		if len(found) < 2 {
-			fmt.Printf("cannot find id in state %q\n", string(state))
-			return f("unknown", "unknown")
-		}
-		pid, err := strconv.Atoi(found[1])
+		pod, err := k8sClient.ContainerLookup(state.State.Pid)
 		if err != nil {
-			fmt.Printf("cannot find pid in %q\n", found[1])
-			return f("unknown", "unknown")
+			fmt.Printf("cannot find container with pid %v: %s\n", state.State.Pid, err)
+			return f(nil, vars)
 		}
-
-		pod, err := k8sClient.ContainerLookup(pid)
-		if err != nil {
-			fmt.Printf("cannot find container with pid %q\n", pid)
-			return f("unknown", "unknown")
+		podCtx := &PodContext{
+			Namespace: pod.ObjectMeta.Namespace,
+			Pod:       pod.ObjectMeta.Name,
+			Container: "TODO",
 		}
-		return f(pod.ObjectMeta.Namespace, pod.ObjectMeta.Name)
+		return f(podCtx, vars)
 	}, nil
 }

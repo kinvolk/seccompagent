@@ -19,7 +19,7 @@ func Run(socketFile string) error {
 		return fmt.Errorf("cannot read stdin: %v\n", err)
 	}
 
-	seccompState := &specs.SeccompState{}
+	seccompState := &specs.ContainerProcessState{}
 	err = json.Unmarshal(stateBuf, seccompState)
 	if err != nil {
 		return fmt.Errorf("cannot parse OCI state: %v\n", err)

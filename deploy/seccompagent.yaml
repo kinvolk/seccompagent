@@ -37,7 +37,7 @@ spec:
       hostPID: true
       containers:
       - name: seccompagent
-        image: quay.io/kinvolk/seccompagent:2020110117411965f574
+        image: quay.io/kinvolk/seccompagent:alban_listener_path
         imagePullPolicy: Always
         env:
           - name: NODE_NAME

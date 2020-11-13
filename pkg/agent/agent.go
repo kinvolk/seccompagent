@@ -32,17 +32,23 @@ func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.
 	stateBuf = stateBuf[:n]
 	oob = oob[:oobn]
 
-	ociState := &specs.State{}
-	err = json.Unmarshal(stateBuf, ociState)
+	containerProcessState := &specs.ContainerProcessState{}
+	err = json.Unmarshal(stateBuf, containerProcessState)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot parse OCI state: %v\n", err)
 	}
 	fmt.Printf("%s\n", stateBuf)
-	fmt.Printf("%v\n", ociState)
+	fmt.Printf("%v\n", containerProcessState)
+	fmt.Printf("%v\n", containerProcessState.Metadata)
+
+	seccompFdIndex, ok := containerProcessState.FdIndexes["seccompFd"]
+	if !ok || seccompFdIndex < 0 {
+		return nil, nil, fmt.Errorf("recvfd: didn't receive seccomp fd")
+	}
 
 	var reg *registry.Registry
 	if resolver != nil {
-		reg = resolver(stateBuf)
+		reg = resolver(containerProcessState)
 	}
 
 	scms, err := unix.ParseSocketControlMessage(oob)
@@ -58,10 +64,16 @@ func receiveNewSeccompFd(resolver registry.ResolverFunc, sockfd int) (*registry.
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(fds) != 1 {
-		return nil, nil, fmt.Errorf("recvfd: number of fds is not 1: %d", len(fds))
+	if seccompFdIndex >= len(fds) {
+		return nil, nil, fmt.Errorf("recvfd: number of fds is %d and seccompFdIndex is ", len(fds), seccompFdIndex)
 	}
-	fd := uintptr(fds[0])
+	fd := uintptr(fds[seccompFdIndex])
+
+	for i := 0; i < len(fds); i++ {
+		if i != seccompFdIndex {
+			unix.Close(fds[i])
+		}
+	}
 
 	return reg, os.NewFile(fd, "seccomp-fd"), nil
 }
