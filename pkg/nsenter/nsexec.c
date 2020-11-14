@@ -67,6 +67,7 @@ static void write_log_with_info(const char *level, const char *function, int lin
 		goto done;
 
 	printf("{\"level\":\"%s\", \"msg\": \"%s:%d %s\"}\n", level, function, line, message);
+	fflush(stdout);
 done:
 	va_end(args);
 }
@@ -80,16 +81,12 @@ done:
 		exit(1);                                                 \
 	} while(0)
 
-void join_mntns(char *path)
+void join_ns(char *fdstr, int nstype)
 {
-	int fd;
+	int fd = atoi(fdstr);
 
-	fd = open(path, O_RDONLY);
-	if (fd < 0)
-		bail("failed to open %s", path);
-
-	if (setns(fd, CLONE_NEWNS) < 0)
-		bail("failed to setns to %s", path);
+	if (setns(fd, nstype) < 0)
+		bail("failed to setns to fd %s", fdstr);
 
 	close(fd);
 }
@@ -112,8 +109,43 @@ void nsexec(void)
 
 	/* For debugging. */
 	prctl(PR_SET_NAME, (unsigned long)"seccompagent:[CHILD]", 0, 0, 0);
-	join_mntns(getenv("_LIBNSENTER_MNTNSPATH"));
 
-	/* Finish executing, let the Go runtime take over. */
-	return;
+	char *mntnsfd = getenv("_LIBNSENTER_MNTNSFD");
+	if (mntnsfd != NULL) {
+		write_log(DEBUG, "join mnt namespace: %s", mntnsfd);
+		join_ns(mntnsfd, CLONE_NEWNS);
+	}
+
+	char *netnsfd = getenv("_LIBNSENTER_NETNSFD");
+	if (netnsfd != NULL) {
+		write_log(DEBUG, "join net namespace: %s", netnsfd);
+		join_ns(netnsfd, CLONE_NEWNET);
+	}
+
+	char *pidnsfd = getenv("_LIBNSENTER_PIDNSFD");
+	if (pidnsfd != NULL) {
+		write_log(DEBUG, "join pid namespace: %s", pidnsfd);
+		join_ns(pidnsfd, CLONE_NEWPID);
+	}
+
+	pid_t pid = fork();
+	if (pid == -1) {
+		bail("failed to fork");
+	}
+	if (pid == 0) {
+		/* child process*/
+		/* Finish executing, let the Go runtime take over. */
+		write(1, "", 1); // write NULL byte
+		return;
+	}
+
+	int wstatus;
+	if (wait(&wstatus) < 0)
+		bail("failed to wait for child process");
+
+	if (WIFEXITED(wstatus)) {
+		exit(WEXITSTATUS(wstatus));
+	} else {
+		exit(1);
+	}
 }

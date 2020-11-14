@@ -3,18 +3,20 @@
 package nsenter
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
-type Module interface {
+type ModuleXXX interface {
 	Run([]byte)
 }
 
-type RunFunc func([]byte)
+type RunFunc func([]byte) string
 
 var modules map[string]RunFunc
 
@@ -44,7 +46,7 @@ func Init() {
 	jsonBlob, err := base64.StdEncoding.DecodeString(str)
 	if err != nil {
 		fmt.Println("error:", err)
-		return
+		os.Exit(1)
 	}
 
 	type module struct {
@@ -55,46 +57,59 @@ func Init() {
 	err = json.Unmarshal(jsonBlob, &m)
 	if err != nil {
 		fmt.Println("error:", err)
-		return
+		os.Exit(1)
 	}
-	fmt.Printf("%+v\n", m)
 
 	f, ok := modules[m.Module]
 	if !ok {
 		fmt.Printf("error: module %q not registered\n", m.Module)
-		return
+		os.Exit(1)
 	}
-	f(jsonBlob)
+	output := f(jsonBlob)
+	fmt.Printf("%s", output)
 }
 
 // OpenNamespaces opens a namespace file. It is done separately to Run() so
 // that the caller can call libseccomp.NotifIDValid() in between.
-func OpenNamespace(nspath string) (*os.File, error) {
+func OpenNamespace(pid uint32, nstype string) (*os.File, error) {
+	nspath := fmt.Sprintf("/proc/%d/ns/%s", pid, nstype)
 	return os.OpenFile(nspath, os.O_RDONLY, 0)
 }
 
 // Run executes a module in other namespaces
-func Run(mntns *os.File, i interface{}) error {
+func Run(mntns, netns, pidns *os.File, i interface{}) ([]byte, error) {
 	fmt.Printf("Run.\n")
 
 	b, err := json.Marshal(i)
 	if err != nil {
-		return fmt.Errorf("Unable to encode interface: %s", err)
+		return nil, fmt.Errorf("Unable to encode interface: %s", err)
 	}
 
+	stdioFdCount := 3
 	cmd := exec.Command("/proc/self/exe", "-init")
 	cmd.Env = append(cmd.Env, "_LIBNSENTER_INIT=1")
 	if mntns != nil {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, mntns)
-		cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSPATH=/proc/self/fd/3")
+		cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
+	}
+	if netns != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, netns)
+		cmd.Env = append(cmd.Env, "_LIBNSENTER_NETNSFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
+	}
+	if pidns != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, pidns)
+		cmd.Env = append(cmd.Env, "_LIBNSENTER_PIDNSFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
 	}
 	cmd.Env = append(cmd.Env, "_LIBNSENTER_COMMAND="+base64.StdEncoding.EncodeToString(b))
 
 	stdoutStderr, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("Unable to start the init command: %s\n%s\n", err, stdoutStderr)
+		return nil, fmt.Errorf("Unable to start the init command: %s\n%s\n", err, stdoutStderr)
 	}
-	fmt.Printf("init command returned:\n<<<\n%s\n>>>\n", stdoutStderr)
-
-	return nil
+	idx := bytes.Index(stdoutStderr, []byte{0})
+	if idx == -1 {
+		return stdoutStderr, nil
+	} else {
+		return stdoutStderr[idx+1:], nil
+	}
 }

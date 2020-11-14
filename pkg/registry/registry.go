@@ -1,11 +1,44 @@
 package registry
 
 import (
+	"syscall"
+
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 )
 
-type HandlerFunc func(libseccomp.ScmpFd, *libseccomp.ScmpNotifReq) (bool, int32, uint64, uint32)
+type HandlerResult struct {
+	Intr   bool
+	ErrVal int32
+	Val    uint64
+	Flags  uint32
+}
+
+type HandlerFunc func(libseccomp.ScmpFd, *libseccomp.ScmpNotifReq) HandlerResult
+
+// Helper functions for handlers
+func HandlerResultIntr() HandlerResult {
+	return HandlerResult{Intr: true}
+}
+func HandlerResultContinue() HandlerResult {
+	return HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
+}
+
+func HandlerResultErrno(err error) HandlerResult {
+	errno, ok := err.(syscall.Errno)
+	if !ok {
+		return HandlerResult{ErrVal: int32(syscall.ENOSYS), Val: ^uint64(0)}
+	}
+	if errno == 0 {
+		return HandlerResult{}
+	}
+	return HandlerResult{ErrVal: int32(errno), Val: ^uint64(0)}
+}
+func HandlerResultSuccess() HandlerResult {
+	return HandlerResult{}
+}
+
+// Registry
 
 type Registry struct {
 	SyscallHandler map[string]HandlerFunc

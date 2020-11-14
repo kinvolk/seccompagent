@@ -12,25 +12,28 @@ import (
 )
 
 func ExecCondition(filePattern string, duration time.Duration) registry.HandlerFunc {
-	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (intr bool, errVal int32, val uint64, flags uint32) {
+	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
+		// This handlers does not change the behaviour but just delay the return
+		result = registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
+
 		memFile, err := readarg.OpenMem(req.Pid)
 		if err != nil {
-			return false, 0, 0, libseccomp.NotifRespFlagContinue
+			return
 		}
 		defer memFile.Close()
 
 		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
-			return true, 0, 0, 0
+			return registry.HandlerResult{Intr: true}
 		}
 
 		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			if os.IsPermission(err) {
 				// Probably because of prctl(PR_SET_DUMPABLE) in runc-init
-				return false, 0, 0, libseccomp.NotifRespFlagContinue
+				return
 			}
 			fmt.Printf("Cannot read argument: %s\n", err)
-			return false, 0, 0, libseccomp.NotifRespFlagContinue
+			return
 		}
 
 		if fileName == filePattern {
@@ -39,6 +42,6 @@ func ExecCondition(filePattern string, duration time.Duration) registry.HandlerF
 		} else {
 			fmt.Printf("execve(%q)\n", fileName)
 		}
-		return false, 0, 0, libseccomp.NotifRespFlagContinue
+		return
 	}
 }

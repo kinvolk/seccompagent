@@ -46,9 +46,13 @@ spec:
                 fieldPath: spec.nodeName
         securityContext:
           capabilities:
+            add:
             # CAP_SYS_PTRACE is useful to read arguments of a processes with
             # the prctl PR_SET_DUMPABLE bit set to zero.
-            add: ["SYS_PTRACE"]
+            - "SYS_PTRACE"
+            # CAP_SYS_ADMIN is useful to setns in containers and mount
+            - "SYS_ADMIN"
+            - "NET_ADMIN"
           # privileged: true
         volumeMounts:
         - name: seccomp-policies

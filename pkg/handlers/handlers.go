@@ -13,35 +13,35 @@ import (
 
 func Error(err error) registry.HandlerFunc {
 	if err == nil {
-		return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (intr bool, errVal int32, val uint64, flags uint32) {
+		return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 			return
 		}
 	} else {
-		return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (intr bool, errVal int32, val uint64, flags uint32) {
-			errVal = int32(err.(syscall.Errno))
-			val = ^uint64(0) // -1
-			flags = 0
+		return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
+			result.ErrVal = int32(err.(syscall.Errno))
+			result.Val = ^uint64(0) // -1
+			result.Flags = 0
 			return
 		}
 	}
 }
 
 func MkdirWithSuffix(suffix string) registry.HandlerFunc {
-	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (intr bool, errVal int32, val uint64, flags uint32) {
+	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		memFile, err := readarg.OpenMem(req.Pid)
 		if err != nil {
-			return false, 0, 0, libseccomp.NotifRespFlagContinue
+			return registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
 		}
 		defer memFile.Close()
 
 		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
-			return true, 0, 0, 0
+			return registry.HandlerResultIntr()
 		}
 
 		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			fmt.Printf("Cannot read argument: %s", err)
-			return false, int32(syscall.ENOMEDIUM), ^uint64(0), 0
+			return registry.HandlerResultErrno(syscall.ENOMEDIUM)
 		}
 
 		// TODO: use mkdirat() with /proc/pid/{root,cwd} opened separately, so we
@@ -51,14 +51,14 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		if strings.HasPrefix(fileName, "/") {
 			err := syscall.Mkdir(fmt.Sprintf("/proc/%d/root%s%s", req.Pid, fileName, suffix), mode)
 			if err != nil {
-				return false, int32(syscall.ENOMEDIUM), ^uint64(0), 0
+				return registry.HandlerResultErrno(syscall.ENOMEDIUM)
 			}
 		} else {
 			err := syscall.Mkdir(fmt.Sprintf("/proc/%d/cwd/%s%s", req.Pid, fileName, suffix), mode)
 			if err != nil {
-				return false, int32(syscall.ENOMEDIUM), ^uint64(0), 0
+				return registry.HandlerResultErrno(syscall.ENOMEDIUM)
 			}
 		}
-		return false, 0, 0, 0
+		return registry.HandlerResultSuccess()
 	}
 }

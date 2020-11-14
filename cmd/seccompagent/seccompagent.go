@@ -67,7 +67,8 @@ func main() {
 			// 	/ # mount -t proc proc root
 			// 	/ # ls /root/self/cmdline
 			// 	/root/self/cmdline
-			r.Add("mount", handlers.Mount)
+			allowedFilesystems := map[string]struct{}{"proc": struct{}{}}
+			r.Add("mount", handlers.Mount(allowedFilesystems))
 
 			// Example:
 			// 	# chmod 777 /
@@ -88,7 +89,9 @@ func main() {
 		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) *registry.Registry {
 			fmt.Printf("Pod %+v\n", podCtx)
 			fmt.Printf("Metadata %+v\n", metadata)
+
 			r := registry.New()
+
 			if v, ok := metadata["MKDIR_TMPL"]; ok {
 				tmpl, err := template.New("mkdirTmpl").Parse(v)
 				if err == nil {
@@ -99,12 +102,24 @@ func main() {
 					}
 				}
 			}
+
 			if fileName, ok := metadata["EXEC_PATTERN"]; ok {
 				d, ok := metadata["EXEC_DURATION"]
 				if ok {
 					duration, _ := time.ParseDuration(d)
 					r.Add("execve", handlers.ExecCondition(fileName, duration))
 				}
+			}
+
+			allowedFilesystems := map[string]struct{}{}
+			if v, ok := metadata["MOUNT_PROC"]; ok && v == "true" {
+				allowedFilesystems["proc"] = struct{}{}
+			}
+			if v, ok := metadata["MOUNT_SYSFS"]; ok && v == "true" {
+				allowedFilesystems["sysfs"] = struct{}{}
+			}
+			if len(allowedFilesystems) > 0 {
+				r.Add("mount", handlers.Mount(allowedFilesystems))
 			}
 			return r
 		}

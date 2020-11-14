@@ -121,12 +121,14 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 		if reg != nil {
 			handler, ok := reg.SyscallHandler[syscallName]
 			if ok {
-				var intr bool
-				intr, resp.Error, resp.Val, resp.Flags = handler(fd, req)
-				if intr {
+				result := handler(fd, req)
+				if result.Intr {
 					fmt.Printf("Seccomp fd#%d: handling of %s was interrupted\n", fd, syscallName)
 					continue
 				}
+				resp.Error = result.ErrVal
+				resp.Val = result.Val
+				resp.Flags = result.Flags
 			}
 		}
 
