@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+
+	"golang.org/x/sys/unix"
 )
 
 type ModuleXXX interface {
@@ -76,8 +78,22 @@ func OpenNamespace(pid uint32, nstype string) (*os.File, error) {
 	return os.OpenFile(nspath, os.O_RDONLY, 0)
 }
 
+// OpenRoot opens a /proc/pid/root file. It is done separately to Run() so
+// that the caller can call libseccomp.NotifIDValid() in between.
+func OpenRoot(pid uint32) (*os.File, error) {
+	path := fmt.Sprintf("/proc/%d/root", pid)
+	return os.OpenFile(path, unix.O_PATH, 0)
+}
+
+// OpenCwd opens a /proc/pid/cwd file. It is done separately to Run() so
+// that the caller can call libseccomp.NotifIDValid() in between.
+func OpenCwd(pid uint32) (*os.File, error) {
+	path := fmt.Sprintf("/proc/%d/cwd", pid)
+	return os.OpenFile(path, unix.O_PATH, 0)
+}
+
 // Run executes a module in other namespaces
-func Run(mntns, netns, pidns *os.File, i interface{}) ([]byte, error) {
+func Run(root, cwd, mntns, netns, pidns *os.File, i interface{}) ([]byte, error) {
 	fmt.Printf("Run.\n")
 
 	b, err := json.Marshal(i)
@@ -88,6 +104,15 @@ func Run(mntns, netns, pidns *os.File, i interface{}) ([]byte, error) {
 	stdioFdCount := 3
 	cmd := exec.Command("/proc/self/exe", "-init")
 	cmd.Env = append(cmd.Env, "_LIBNSENTER_INIT=1")
+
+	if root != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, root)
+		cmd.Env = append(cmd.Env, "_LIBNSENTER_ROOTFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
+	}
+	if cwd != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, cwd)
+		cmd.Env = append(cmd.Env, "_LIBNSENTER_CWDFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
+	}
 	if mntns != nil {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, mntns)
 		cmd.Env = append(cmd.Env, "_LIBNSENTER_MNTNSFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
@@ -100,6 +125,7 @@ func Run(mntns, netns, pidns *os.File, i interface{}) ([]byte, error) {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, pidns)
 		cmd.Env = append(cmd.Env, "_LIBNSENTER_PIDNSFD="+strconv.Itoa(stdioFdCount+len(cmd.ExtraFiles)-1))
 	}
+
 	cmd.Env = append(cmd.Env, "_LIBNSENTER_COMMAND="+base64.StdEncoding.EncodeToString(b))
 
 	stdoutStderr, err := cmd.CombinedOutput()

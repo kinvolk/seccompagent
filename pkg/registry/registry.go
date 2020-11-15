@@ -25,6 +25,9 @@ func HandlerResultContinue() HandlerResult {
 }
 
 func HandlerResultErrno(err error) HandlerResult {
+	if err == nil {
+		return HandlerResult{}
+	}
 	errno, ok := err.(syscall.Errno)
 	if !ok {
 		return HandlerResult{ErrVal: int32(syscall.ENOSYS), Val: ^uint64(0)}

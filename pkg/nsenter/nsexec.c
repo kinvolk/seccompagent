@@ -116,6 +116,18 @@ void nsexec(void)
 		join_ns(mntnsfd, CLONE_NEWNS);
 	}
 
+	char *rootfd = getenv("_LIBNSENTER_ROOTFD");
+	if (rootfd != NULL) {
+		write_log(DEBUG, "chroot: %s", rootfd);
+		fchdir(atoi(rootfd));
+		chroot(".");
+	}
+	char *cwdfd = getenv("_LIBNSENTER_CWDFD");
+	if (cwdfd != NULL) {
+		write_log(DEBUG, "chcwd: %s", cwdfd);
+		fchdir(atoi(cwdfd));
+	}
+
 	char *netnsfd = getenv("_LIBNSENTER_NETNSFD");
 	if (netnsfd != NULL) {
 		write_log(DEBUG, "join net namespace: %s", netnsfd);

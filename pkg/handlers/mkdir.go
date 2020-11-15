@@ -1,5 +1,3 @@
-// +build linux,cgo
-
 package handlers
 
 import (
@@ -8,41 +6,40 @@ import (
 	"strconv"
 	"syscall"
 
-	libseccomp "github.com/seccomp/libseccomp-golang"
-
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/readarg"
 	"github.com/kinvolk/seccompagent/pkg/registry"
+
+	libseccomp "github.com/seccomp/libseccomp-golang"
 )
 
-var _ = nsenter.RegisterModule("mount", runMountInNamespaces)
+var _ = nsenter.RegisterModule("mkdir", runMkdirInNamespaces)
 
-type mountModuleParams struct {
-	Module     string `json:"module,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Dest       string `json:"dest,omitempty"`
-	Filesystem string `json:"filesystem,omitempty"`
+type mkdirModuleParams struct {
+	Module string `json:"module,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Mode   uint32 `json:"mode,omitempty"`
 }
 
-func runMountInNamespaces(param []byte) string {
-	var params mountModuleParams
+func runMkdirInNamespaces(param []byte) string {
+	var params mkdirModuleParams
 	err := json.Unmarshal(param, &params)
 	if err != nil {
 		return fmt.Sprintln("%d", int(syscall.ENOSYS))
 	}
 
-	err = syscall.Mount(params.Source, params.Dest, params.Filesystem, 0, "")
+	err = syscall.Mkdir(params.Path, params.Mode)
 	if err != nil {
 		return fmt.Sprintf("%d", int(err.(syscall.Errno)))
 	}
 	return "0"
 }
 
-func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
+func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		memFile, err := readarg.OpenMem(req.Pid)
 		if err != nil {
-			return registry.HandlerResultErrno(syscall.EPERM)
+			return registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
 		}
 		defer memFile.Close()
 
@@ -50,34 +47,16 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 			return registry.HandlerResultIntr()
 		}
 
-		source, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
+		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			fmt.Printf("Cannot read argument: %s", err)
 			return registry.HandlerResultErrno(syscall.EFAULT)
-		}
-		dest, err := readarg.ReadString(memFile, int64(req.Data.Args[1]))
-		if err != nil {
-			fmt.Printf("Cannot read argument: %s", err)
-			return registry.HandlerResultErrno(syscall.EFAULT)
-		}
-		filesystem, err := readarg.ReadString(memFile, int64(req.Data.Args[2]))
-		if err != nil {
-			fmt.Printf("Cannot read argument: %s", err)
-			return registry.HandlerResultErrno(syscall.EFAULT)
-		}
-		fmt.Printf("mount: %q %q %q\n", source, dest, filesystem)
-
-		if _, ok := allowedFilesystems[filesystem]; !ok {
-			// The seccomp agent is not allowed to perform this operation.
-			// Let the kernel decide if it's allowed
-			return registry.HandlerResultContinue()
 		}
 
-		params := mountModuleParams{
-			Module:     "mount",
-			Source:     source,
-			Dest:       dest,
-			Filesystem: filesystem,
+		params := mkdirModuleParams{
+			Module: "mkdir",
+			Path:   fileName + suffix,
+			Mode:   uint32(req.Data.Args[1]),
 		}
 
 		mntns, err := nsenter.OpenNamespace(req.Pid, "mnt")
@@ -86,20 +65,6 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 			return registry.HandlerResultErrno(syscall.EPERM)
 		}
 		defer mntns.Close()
-
-		netns, err := nsenter.OpenNamespace(req.Pid, "net")
-		if err != nil {
-			fmt.Printf("Cannot open namespace: %s", err)
-			return registry.HandlerResultErrno(syscall.EPERM)
-		}
-		defer netns.Close()
-
-		pidns, err := nsenter.OpenNamespace(req.Pid, "pid")
-		if err != nil {
-			fmt.Printf("Cannot open namespace: %s", err)
-			return registry.HandlerResultErrno(syscall.EPERM)
-		}
-		defer pidns.Close()
 
 		root, err := nsenter.OpenRoot(req.Pid)
 		if err != nil {
@@ -120,7 +85,7 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 			return registry.HandlerResultIntr()
 		}
 
-		output, err := nsenter.Run(root, cwd, mntns, netns, pidns, params)
+		output, err := nsenter.Run(root, cwd, mntns, nil, nil, params)
 		if err != nil {
 			fmt.Printf("Run returned: %s\n%v\n", output, err)
 			return registry.HandlerResultErrno(syscall.ENOSYS)
