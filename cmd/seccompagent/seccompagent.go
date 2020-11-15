@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 	"text/template"
 	"time"
@@ -17,7 +16,6 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/handlers"
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
-	"github.com/kinvolk/seccompagent/pkg/ocihook"
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -25,13 +23,11 @@ import (
 
 var (
 	socketFile    string
-	hookParam     bool
 	resolverParam string
 )
 
 func init() {
 	flag.StringVar(&socketFile, "socketfile", "/run/seccomp-agent.socket", "Socket file")
-	flag.BoolVar(&hookParam, "hook", false, "Run as OCI hook")
 	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes]")
 }
 
@@ -42,11 +38,6 @@ func main() {
 	if flag.NArg() > 0 {
 		flag.PrintDefaults()
 		panic(errors.New("invalid command"))
-	}
-
-	if hookParam || os.Args[0] == "seccomphook" {
-		ocihook.Run(socketFile)
-		return
 	}
 
 	var resolver registry.ResolverFunc

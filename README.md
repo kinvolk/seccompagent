@@ -7,11 +7,10 @@ Its goal is to support different use cases:
 
 It is possible to write your own seccomp agent with a different behaviour by reusing the packages in the `pkg/` directory.
 The Kinvolk Seccomp Agent is only about 100 lines of code. It relies on different packages:
-- `pkg/agent`: listens on a unix socket to receive new seccomp file descriptors from the OCI hook and associates a registry to them
+- `pkg/agent`: listens on a unix socket to receive new seccomp file descriptors from the container runtime and associates a registry to them
 - `pkg/handlers`: basic implementations of system call handlers, such as mkdir, mount...
 - `pkg/kuberesolver`: allows users to assign a custom registry to the seccomp fd depending on the Kubernetes pod.
 - `pkg/nsenter`: allows handlers implementations to execute code in different namespaces
-- `pkg/ocihook`: implements a sendSeccompFd OCI hook, so it can be called by runc.
 - `pkg/readarg`: allows handlers implementations to dereference system call arguments.
 - `pkg/registry`: a set of system call handlers associated to a seccomp file descriptor.
 
@@ -56,6 +55,8 @@ This demo shows that the Seccomp Agent can have different behaviour depending on
       "SCMP_ARCH_X32"
    ],
    "defaultAction" : "SCMP_ACT_ALLOW",
+   "listenerPath": "/run/seccomp-agent.socket",
+   "listenerMetadata": "MKDIR_TMPL=-{{.Namespace}}-{{.Pod}}-{{.Container}}\nEXEC_PATTERN=/bin/true\nEXEC_DURATION=2s\nMOUNT_PROC=true",
    "syscalls" : [
       {
          "action" : "SCMP_ACT_NOTIFY",
@@ -98,7 +99,13 @@ spec:
 ```
 $ kubectl exec -it mynotifypod -- /bin/sh
 / # mkdir /abc
-/ # ls -ld /ab*
-drwxr-xr-x    2 nobody   nobody        4096 Nov  1 17:50 /abc-default-mynotifypod
-
+/ # ls -1d /abc*
+/abc-default-mynotifypod-TODO
+/ # mount -t proc proc root
+/ # mount|grep /root
+proc on /root type proc (rw,relatime)
+/ # time -f %E /bin/echo -n ""
+0m 0.00s
+/ # time -f %E /bin/true
+0m 2.00s
 ```
