@@ -8,6 +8,7 @@ import (
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"github.com/kinvolk/seccompagent/pkg/registry"
@@ -61,12 +62,13 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registr
 	}
 	fd := uintptr(fds[seccompFdIndex])
 
-	fmt.Printf("New seccomp filter (fd#%d): ID: %v Pid: %v Pid1: %v Annotations: %v\n",
-		fd,
-		containerProcessState.State.ID,
-		containerProcessState.Pid,
-		containerProcessState.State.Pid,
-		containerProcessState.State.Annotations)
+	log.WithFields(log.Fields{
+		"fd":          fd,
+		"id":          containerProcessState.State.ID,
+		"pid":         containerProcessState.Pid,
+		"pid1":        containerProcessState.State.Pid,
+		"annotations": containerProcessState.State.Annotations,
+	}).Debug("New seccomp fd received on socket")
 
 	for i := 0; i < len(fds); i++ {
 		if i != seccompFdIndex {
@@ -86,7 +88,9 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registr
 func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 	fd := libseccomp.ScmpFd(seccompFile.Fd())
 	defer func() {
-		fmt.Printf("Seccomp fd#%d: Closing\n", fd)
+		log.WithFields(log.Fields{
+			"fd": fd,
+		}).Debug("Closing seccomp fd")
 		seccompFile.Close()
 	}()
 
@@ -94,21 +98,38 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 		req, err := libseccomp.NotifReceive(fd)
 		if err != nil {
 			if err == unix.ENOENT {
-				fmt.Printf("Seccomp fd#%d: handling of new notification could not start\n", fd)
+				log.WithFields(log.Fields{
+					"fd": fd,
+				}).Trace("Handling of new notification could not start")
 				continue
 			}
-			fmt.Printf("Error in NotifReceive(): %s\n", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"err": err,
+			}).Error("Error on receiving seccomp notification")
 			return
 		}
 		syscallName, err := req.Data.Syscall.GetName()
 		if err != nil {
-			fmt.Printf("Error in decoding syscall %v(): %s\n", req.Data.Syscall, err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"req": req,
+				"err": err,
+			}).Error("Error in decoding syscall")
 			return
 		}
-		fmt.Printf("Seccomp fd#%d: received syscall %q, pid %v, arch %q, args %+v\n", fd, syscallName, req.Pid, req.Data.Arch, req.Data.Args)
+
+		log.WithFields(log.Fields{
+			"fd":      fd,
+			"syscall": syscallName,
+		}).Trace("Received syscall")
 
 		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
-			fmt.Printf("Seccomp fd#%d: notification no longer valid: %s\n", fd, err)
+			log.WithFields(log.Fields{
+				"fd":      fd,
+				"syscall": syscallName,
+				"req":     req,
+			}).Debug("Notification no longer valid")
 			continue
 		}
 
@@ -124,7 +145,11 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 			if ok {
 				result := handler(fd, req)
 				if result.Intr {
-					fmt.Printf("Seccomp fd#%d: handling of %s was interrupted\n", fd, syscallName)
+					log.WithFields(log.Fields{
+						"fd":      fd,
+						"syscall": syscallName,
+						"req":     req,
+					}).Debug("Handling of syscall interrupted")
 					continue
 				}
 				resp.Error = result.ErrVal
@@ -135,10 +160,21 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 
 		if err = libseccomp.NotifRespond(fd, resp); err != nil {
 			if err == unix.ENOENT {
-				fmt.Printf("Seccomp fd#%d: handling of %s could not be finished\n", fd, syscallName)
+				log.WithFields(log.Fields{
+					"fd":      fd,
+					"syscall": syscallName,
+					"req":     req,
+					"resp":    resp,
+				}).Debug("Could not reply to seccomp notification")
 				continue
 			}
-			fmt.Printf("Error in notification response: %s\n", err)
+			log.WithFields(log.Fields{
+				"fd":      fd,
+				"syscall": syscallName,
+				"req":     req,
+				"resp":    resp,
+				"err":     err,
+			}).Error("Error on responding seccomp notification")
 			return
 		}
 	}
@@ -168,7 +204,10 @@ func StartAgent(socketFile string, resolver registry.ResolverFunc) error {
 
 		reg, newSeccompFile, err := receiveNewSeccompFile(resolver, int(socket.Fd()))
 		if err != nil {
-			fmt.Printf("%s\n", err)
+			log.WithFields(log.Fields{
+				"socket": socketFile,
+				"err":    err,
+			}).Error("Error on receiving seccomp fd")
 		}
 		socket.Close()
 

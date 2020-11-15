@@ -94,8 +94,6 @@ func OpenCwd(pid uint32) (*os.File, error) {
 
 // Run executes a module in other namespaces
 func Run(root, cwd, mntns, netns, pidns *os.File, i interface{}) ([]byte, error) {
-	fmt.Printf("Run.\n")
-
 	b, err := json.Marshal(i)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to encode interface: %s", err)

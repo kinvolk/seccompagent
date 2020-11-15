@@ -1,14 +1,13 @@
 package handlers
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/kinvolk/seccompagent/pkg/readarg"
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	log "github.com/sirupsen/logrus"
 )
 
 func ExecCondition(filePattern string, duration time.Duration) registry.HandlerFunc {
@@ -28,19 +27,30 @@ func ExecCondition(filePattern string, duration time.Duration) registry.HandlerF
 
 		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
-			if os.IsPermission(err) {
-				// Probably because of prctl(PR_SET_DUMPABLE) in runc-init
-				return
-			}
-			fmt.Printf("Cannot read argument: %s\n", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"pid": req.Pid,
+				"err": err,
+			}).Error("Cannot read argument")
 			return
 		}
 
 		if fileName == filePattern {
-			fmt.Printf("execve(%q): matching pattern %q: wait %s\n", fileName, filePattern, duration)
+			log.WithFields(log.Fields{
+				"fd":           fd,
+				"pid":          req.Pid,
+				"filename":     fileName,
+				"file-pattern": filePattern,
+				"duration":     duration,
+			}).Debug("Execve: introduce delay")
 			time.Sleep(duration)
 		} else {
-			fmt.Printf("execve(%q)\n", fileName)
+			log.WithFields(log.Fields{
+				"fd":           fd,
+				"pid":          req.Pid,
+				"filename":     fileName,
+				"file-pattern": filePattern,
+			}).Debug("Execve: no match; continue")
 		}
 		return
 	}

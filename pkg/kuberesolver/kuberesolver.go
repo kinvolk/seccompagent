@@ -2,7 +2,6 @@ package kuberesolver
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
+	log "github.com/sirupsen/logrus"
 )
 
 type PodContext struct {
@@ -51,7 +51,10 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 
 		pod, err := k8sClient.ContainerLookup(state.State.Pid)
 		if err != nil {
-			fmt.Printf("cannot find container with pid %v: %s\n", state.State.Pid, err)
+			log.WithFields(log.Fields{
+				"pid": state.State.Pid,
+				"err": err,
+			}).Error("Cannot find container in Kubernetes")
 			return f(nil, vars)
 		}
 		podCtx := &PodContext{

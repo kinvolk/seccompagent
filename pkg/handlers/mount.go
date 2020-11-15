@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
@@ -52,20 +53,42 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 
 		source, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
-			fmt.Printf("Cannot read argument: %s", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"pid": req.Pid,
+				"arg": 0,
+				"err": err,
+			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 		dest, err := readarg.ReadString(memFile, int64(req.Data.Args[1]))
 		if err != nil {
-			fmt.Printf("Cannot read argument: %s", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"pid": req.Pid,
+				"arg": 1,
+				"err": err,
+			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 		filesystem, err := readarg.ReadString(memFile, int64(req.Data.Args[2]))
 		if err != nil {
-			fmt.Printf("Cannot read argument: %s", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"pid": req.Pid,
+				"arg": 2,
+				"err": err,
+			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
-		fmt.Printf("mount: %q %q %q\n", source, dest, filesystem)
+
+		log.WithFields(log.Fields{
+			"fd":         fd,
+			"pid":        req.Pid,
+			"source":     source,
+			"dest":       dest,
+			"filesystem": filesystem,
+		}).Debug("Mount")
 
 		if _, ok := allowedFilesystems[filesystem]; !ok {
 			// The seccomp agent is not allowed to perform this operation.
@@ -82,52 +105,89 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 
 		mntns, err := nsenter.OpenNamespace(req.Pid, "mnt")
 		if err != nil {
-			fmt.Printf("Cannot open namespace: %s", err)
+			log.WithFields(log.Fields{
+				"fd":   fd,
+				"pid":  req.Pid,
+				"kind": "mnt",
+				"err":  err,
+			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer mntns.Close()
 
 		netns, err := nsenter.OpenNamespace(req.Pid, "net")
 		if err != nil {
-			fmt.Printf("Cannot open namespace: %s", err)
+			log.WithFields(log.Fields{
+				"fd":   fd,
+				"pid":  req.Pid,
+				"kind": "net",
+				"err":  err,
+			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer netns.Close()
 
 		pidns, err := nsenter.OpenNamespace(req.Pid, "pid")
 		if err != nil {
-			fmt.Printf("Cannot open namespace: %s", err)
+			log.WithFields(log.Fields{
+				"fd":   fd,
+				"pid":  req.Pid,
+				"kind": "pid",
+				"err":  err,
+			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer pidns.Close()
 
 		root, err := nsenter.OpenRoot(req.Pid)
 		if err != nil {
-			fmt.Printf("Cannot open root: %s", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"pid": req.Pid,
+				"err": err,
+			}).Error("Cannot open root")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer root.Close()
 
 		cwd, err := nsenter.OpenCwd(req.Pid)
 		if err != nil {
-			fmt.Printf("Cannot open cwd: %s", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"pid": req.Pid,
+				"err": err,
+			}).Error("Cannot open cwd")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer cwd.Close()
 
 		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
-			fmt.Printf("TOCTOU check failed: req.ID is no longer valid: %s\n", err)
+			log.WithFields(log.Fields{
+				"fd":  fd,
+				"req": req,
+				"err": err,
+			}).Debug("Notification no longer valid")
 			return registry.HandlerResultIntr()
 		}
 
 		output, err := nsenter.Run(root, cwd, mntns, netns, pidns, params)
 		if err != nil {
-			fmt.Printf("Run returned: %s\n%v\n", output, err)
+			log.WithFields(log.Fields{
+				"fd":     fd,
+				"pid":    req.Pid,
+				"output": output,
+				"err":    err,
+			}).Error("Run in target namespaces failed")
 			return registry.HandlerResultErrno(unix.ENOSYS)
 		}
 		errno, err := strconv.Atoi(string(output))
 		if err != nil {
-			fmt.Printf("Run returned: %s\n%v\n", output, err)
+			log.WithFields(log.Fields{
+				"fd":     fd,
+				"pid":    req.Pid,
+				"output": output,
+				"err":    err,
+			}).Error("Cannot parse return value")
 			return registry.HandlerResultErrno(unix.ENOSYS)
 		}
 		if errno != 0 {

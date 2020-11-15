@@ -6,11 +6,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"text/template"
 	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/kinvolk/seccompagent/pkg/agent"
 	"github.com/kinvolk/seccompagent/pkg/handlers"
@@ -19,22 +18,41 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 var (
 	socketFile    string
 	resolverParam string
+	logflags      string
 )
 
 func init() {
 	flag.StringVar(&socketFile, "socketfile", "/run/seccomp-agent.socket", "Socket file")
 	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes]")
+	flag.StringVar(&logflags, "log", "info", "log level [trace,debug,info,warn,error,fatal,color,nocolor,json]")
 }
 
 func main() {
 	nsenter.Init()
 
 	flag.Parse()
+	for _, v := range strings.Split(logflags, ",") {
+		if v == "json" {
+			log.SetFormatter(&log.JSONFormatter{})
+		} else if v == "color" {
+			log.SetFormatter(&log.TextFormatter{ForceColors: true})
+		} else if v == "nocolor" {
+			log.SetFormatter(&log.TextFormatter{DisableColors: true})
+		} else if lvl, err := log.ParseLevel(v); err == nil {
+			log.SetLevel(lvl)
+		} else {
+			fmt.Fprintf(os.Stderr, "Invalid log level: %s\n", err.Error())
+			flag.Usage()
+			os.Exit(1)
+		}
+	}
 	if flag.NArg() > 0 {
 		flag.PrintDefaults()
 		panic(errors.New("invalid command"))
@@ -78,8 +96,10 @@ func main() {
 		}
 	case "kubernetes":
 		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) *registry.Registry {
-			fmt.Printf("Pod %+v\n", podCtx)
-			fmt.Printf("Metadata %+v\n", metadata)
+			log.WithFields(log.Fields{
+				"pod":      podCtx,
+				"metadata": metadata,
+			}).Debug("New container")
 
 			r := registry.New()
 
