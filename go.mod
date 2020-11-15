@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/opencontainers/runtime-spec v1.0.2
 	github.com/seccomp/libseccomp-golang v0.9.1
+	github.com/sirupsen/logrus v1.7.0
 	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
 	golang.org/x/sys v0.0.0-20201101102859-da207088b7d1
