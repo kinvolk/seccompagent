@@ -37,7 +37,7 @@ spec:
       hostPID: true
       containers:
       - name: seccompagent
-        image: quay.io/kinvolk/seccompagent:alban_initial_code
+        image: quay.io/kinvolk/seccompagent:latest
         command: [ "/bin/seccompagent", "-resolver=kubernetes", "-log=trace" ]
         imagePullPolicy: Always
         env:
