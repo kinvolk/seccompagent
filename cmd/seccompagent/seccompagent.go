@@ -8,17 +8,17 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 	"text/template"
 	"time"
 
-	"github.com/kinvolk/seccompagent/pkg/agent"
-	"github.com/kinvolk/seccompagent/pkg/registry"
+	"golang.org/x/sys/unix"
 
+	"github.com/kinvolk/seccompagent/pkg/agent"
 	"github.com/kinvolk/seccompagent/pkg/handlers"
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/ocihook"
+	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -73,7 +73,7 @@ func main() {
 			// Example:
 			// 	# chmod 777 /
 			// 	chmod: /: Bad message
-			r.Add("chmod", handlers.Error(syscall.EBADMSG))
+			r.Add("chmod", handlers.Error(unix.EBADMSG))
 
 			// Example:
 			// 	# mkdir /abc

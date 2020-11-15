@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"syscall"
 
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/readarg"
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	"golang.org/x/sys/unix"
 )
 
 var _ = nsenter.RegisterModule("mkdir", runMkdirInNamespaces)
@@ -25,12 +25,12 @@ func runMkdirInNamespaces(param []byte) string {
 	var params mkdirModuleParams
 	err := json.Unmarshal(param, &params)
 	if err != nil {
-		return fmt.Sprintln("%d", int(syscall.ENOSYS))
+		return fmt.Sprintln("%d", int(unix.ENOSYS))
 	}
 
-	err = syscall.Mkdir(params.Path, params.Mode)
+	err = unix.Mkdir(params.Path, params.Mode)
 	if err != nil {
-		return fmt.Sprintf("%d", int(err.(syscall.Errno)))
+		return fmt.Sprintf("%d", int(err.(unix.Errno)))
 	}
 	return "0"
 }
@@ -50,7 +50,7 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			fmt.Printf("Cannot read argument: %s", err)
-			return registry.HandlerResultErrno(syscall.EFAULT)
+			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 
 		params := mkdirModuleParams{
@@ -62,21 +62,21 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		mntns, err := nsenter.OpenNamespace(req.Pid, "mnt")
 		if err != nil {
 			fmt.Printf("Cannot open namespace: %s", err)
-			return registry.HandlerResultErrno(syscall.EPERM)
+			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer mntns.Close()
 
 		root, err := nsenter.OpenRoot(req.Pid)
 		if err != nil {
 			fmt.Printf("Cannot open root: %s", err)
-			return registry.HandlerResultErrno(syscall.EPERM)
+			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer root.Close()
 
 		cwd, err := nsenter.OpenCwd(req.Pid)
 		if err != nil {
 			fmt.Printf("Cannot open cwd: %s", err)
-			return registry.HandlerResultErrno(syscall.EPERM)
+			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer cwd.Close()
 
@@ -88,15 +88,15 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		output, err := nsenter.Run(root, cwd, mntns, nil, nil, params)
 		if err != nil {
 			fmt.Printf("Run returned: %s\n%v\n", output, err)
-			return registry.HandlerResultErrno(syscall.ENOSYS)
+			return registry.HandlerResultErrno(unix.ENOSYS)
 		}
 		errno, err := strconv.Atoi(string(output))
 		if err != nil {
 			fmt.Printf("Run returned: %s\n%v\n", output, err)
-			return registry.HandlerResultErrno(syscall.ENOSYS)
+			return registry.HandlerResultErrno(unix.ENOSYS)
 		}
 		if errno != 0 {
-			return registry.HandlerResultErrno(syscall.Errno(errno))
+			return registry.HandlerResultErrno(unix.Errno(errno))
 		}
 
 		return registry.HandlerResultSuccess()

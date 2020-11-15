@@ -1,10 +1,9 @@
 package registry
 
 import (
-	"syscall"
-
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	"golang.org/x/sys/unix"
 )
 
 type HandlerResult struct {
@@ -28,9 +27,9 @@ func HandlerResultErrno(err error) HandlerResult {
 	if err == nil {
 		return HandlerResult{}
 	}
-	errno, ok := err.(syscall.Errno)
+	errno, ok := err.(unix.Errno)
 	if !ok {
-		return HandlerResult{ErrVal: int32(syscall.ENOSYS), Val: ^uint64(0)}
+		return HandlerResult{ErrVal: int32(unix.ENOSYS), Val: ^uint64(0)}
 	}
 	if errno == 0 {
 		return HandlerResult{}
