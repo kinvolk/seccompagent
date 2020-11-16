@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -65,6 +66,14 @@ func (k *K8sClient) ContainerLookup(pid int) (*v1.Pod, error) {
 			!strings.Contains(cgroupPathV1, uid) {
 			continue
 		}
+
+		log.WithFields(log.Fields{
+			"pid":          pid,
+			"cgroupPathV1": cgroupPathV1,
+			"cgroupPathV2": cgroupPathV2,
+			"namespace":    pod.ObjectMeta.Namespace,
+			"pod":          pod.ObjectMeta.Name,
+		}).Trace("Found pod from pid")
 
 		return &pod, nil
 	}
