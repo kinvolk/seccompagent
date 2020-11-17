@@ -58,7 +58,7 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registr
 		return nil, nil, err
 	}
 	if seccompFdIndex >= len(fds) {
-		return nil, nil, fmt.Errorf("recvfd: number of fds is %d and seccompFdIndex is ", len(fds), seccompFdIndex)
+		return nil, nil, fmt.Errorf("recvfd: number of fds is %d and seccompFdIndex is %d", len(fds), seccompFdIndex)
 	}
 	fd := uintptr(fds[seccompFdIndex])
 

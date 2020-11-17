@@ -29,7 +29,7 @@ func runMountInNamespaces(param []byte) string {
 	var params mountModuleParams
 	err := json.Unmarshal(param, &params)
 	if err != nil {
-		return fmt.Sprintln("%d", int(unix.ENOSYS))
+		return fmt.Sprintf("%d", int(unix.ENOSYS))
 	}
 
 	err = unix.Mount(params.Source, params.Dest, params.Filesystem, 0, "")

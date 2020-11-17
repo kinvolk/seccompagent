@@ -26,7 +26,7 @@ func runMkdirInNamespaces(param []byte) string {
 	var params mkdirModuleParams
 	err := json.Unmarshal(param, &params)
 	if err != nil {
-		return fmt.Sprintln("%d", int(unix.ENOSYS))
+		return fmt.Sprintf("%d", int(unix.ENOSYS))
 	}
 
 	err = unix.Mkdir(params.Path, params.Mode)
