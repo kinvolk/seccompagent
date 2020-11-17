@@ -28,9 +28,20 @@ const (
 )
 
 type PodContext struct {
+	// Namespace is the Kubernetes namespace of the pod
 	Namespace string
-	Pod       string
+
+	// Pod is the name of the Kubernetes pod
+	Pod string
+
+	// Container is the name of the container in the Kubernetes pod
 	Container string
+
+	// Pid is the process is that is traced by the seccomp filter
+	Pid int
+
+	// Pid1 is the first process in the container
+	Pid1 int
 }
 
 type KubeResolverFunc func(pod *PodContext, metadata map[string]string) *registry.Registry
@@ -84,6 +95,9 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 		vars := parseKV(state.Metadata)
 
 		podCtx := readAnnotations(state.State.Annotations)
+
+		podCtx.Pid = state.Pid
+		podCtx.Pid1 = state.State.Pid
 
 		if podCtx.Pod != "" && podCtx.Namespace != "" {
 			log.WithFields(log.Fields{

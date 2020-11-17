@@ -122,6 +122,14 @@ func main() {
 				}
 			}
 
+			if sidecars, ok := metadata["SIDECARS"]; ok {
+				d, ok := metadata["SIDECARS_DELAY"]
+				if ok {
+					duration, _ := time.ParseDuration(d)
+					r.Add("execve", handlers.ExecSidecars(podCtx, sidecars, duration))
+				}
+			}
+
 			allowedFilesystems := map[string]struct{}{}
 			if v, ok := metadata["MOUNT_PROC"]; ok && v == "true" {
 				allowedFilesystems["proc"] = struct{}{}
