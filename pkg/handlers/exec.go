@@ -15,7 +15,7 @@ import (
 )
 
 func ExecCondition(filePattern string, duration time.Duration) registry.HandlerFunc {
-	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
+	return func(filter registry.Filter, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		// This handlers does not change the behaviour but just delay the return
 		result = registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
 
@@ -25,23 +25,23 @@ func ExecCondition(filePattern string, duration time.Duration) registry.HandlerF
 		}
 		defer memFile.Close()
 
-		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		if err := filter.NotifIDValid(req); err != nil {
 			return registry.HandlerResult{Intr: true}
 		}
 
 		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot read argument")
 			return
 		}
 
 		if fileName == filePattern {
 			log.WithFields(log.Fields{
-				"fd":           fd,
+				"filter":       filter.Name(),
 				"pid":          req.Pid,
 				"filename":     fileName,
 				"file-pattern": filePattern,
@@ -50,7 +50,7 @@ func ExecCondition(filePattern string, duration time.Duration) registry.HandlerF
 			time.Sleep(duration)
 		} else {
 			log.WithFields(log.Fields{
-				"fd":           fd,
+				"filter":       filter.Name(),
 				"pid":          req.Pid,
 				"filename":     fileName,
 				"file-pattern": filePattern,
@@ -66,7 +66,7 @@ func ExecSidecars(podCtx *kuberesolver.PodContext, sidecarsList string, duration
 		sidecars[sidecar] = struct{}{}
 	}
 
-	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
+	return func(filter registry.Filter, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		// This handlers does not change the behaviour but just delay the return
 		result = registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
 
@@ -82,7 +82,7 @@ func ExecSidecars(podCtx *kuberesolver.PodContext, sidecarsList string, duration
 		// Sidecars can go on
 		if _, ok := sidecars[podCtx.Container]; ok {
 			log.WithFields(log.Fields{
-				"fd":        fd,
+				"filter":    filter.Name(),
 				"pid":       req.Pid,
 				"container": podCtx.Container,
 			}).Debug("Execve: found sidecar")
@@ -95,7 +95,7 @@ func ExecSidecars(podCtx *kuberesolver.PodContext, sidecarsList string, duration
 		err := unix.Stat(fmt.Sprintf("/proc/%d", req.Pid), &stat)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":        fd,
+				"filter":    filter.Name(),
 				"pid":       req.Pid,
 				"container": podCtx.Container,
 			}).Error("Execve: cannot read procfs")
@@ -105,7 +105,7 @@ func ExecSidecars(podCtx *kuberesolver.PodContext, sidecarsList string, duration
 		diff := ctime.Add(duration).Sub(time.Now())
 
 		log.WithFields(log.Fields{
-			"fd":        fd,
+			"filter":    filter.Name(),
 			"pid":       req.Pid,
 			"container": podCtx.Container,
 			"ctime":     ctime.String(),

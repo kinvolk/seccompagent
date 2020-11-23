@@ -44,7 +44,7 @@ type PodContext struct {
 	Pid1 int
 }
 
-type KubeResolverFunc func(pod *PodContext, metadata map[string]string) *registry.Registry
+type KubeResolverFunc func(pod *PodContext, metadata map[string]string) registry.Filter
 
 func parseKV(metadata string) map[string]string {
 	vars := map[string]string{}
@@ -91,7 +91,7 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 		return nil, errors.New("cannot create kubernetes client")
 	}
 
-	return func(state *specs.ContainerProcessState) *registry.Registry {
+	return func(state *specs.ContainerProcessState) registry.Filter {
 		vars := parseKV(state.Metadata)
 
 		podCtx := readAnnotations(state.State.Annotations)

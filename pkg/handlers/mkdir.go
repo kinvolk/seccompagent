@@ -37,23 +37,23 @@ func runMkdirInNamespaces(param []byte) string {
 }
 
 func MkdirWithSuffix(suffix string) registry.HandlerFunc {
-	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
+	return func(filter registry.Filter, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		memFile, err := readarg.OpenMem(req.Pid)
 		if err != nil {
 			return registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
 		}
 		defer memFile.Close()
 
-		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		if err := filter.NotifIDValid(req); err != nil {
 			return registry.HandlerResultIntr()
 		}
 
 		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
@@ -67,9 +67,9 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		mntns, err := nsenter.OpenNamespace(req.Pid, "mnt")
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
@@ -78,9 +78,9 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		root, err := nsenter.OpenRoot(req.Pid)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot open root")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
@@ -89,19 +89,19 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		cwd, err := nsenter.OpenCwd(req.Pid)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot open cwd")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer cwd.Close()
 
-		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		if err := filter.NotifIDValid(req); err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"req": req,
-				"err": err,
+				"filter": filter.Name(),
+				"req":    req,
+				"err":    err,
 			}).Debug("Notification no longer valid")
 			return registry.HandlerResultIntr()
 		}
@@ -109,7 +109,7 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		output, err := nsenter.Run(root, cwd, mntns, nil, nil, params)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":     fd,
+				"filter": filter.Name(),
 				"pid":    req.Pid,
 				"output": output,
 				"err":    err,
@@ -119,7 +119,7 @@ func MkdirWithSuffix(suffix string) registry.HandlerFunc {
 		errno, err := strconv.Atoi(string(output))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":     fd,
+				"filter": filter.Name(),
 				"pid":    req.Pid,
 				"output": output,
 				"err":    err,
