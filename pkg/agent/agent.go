@@ -14,7 +14,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 )
 
-func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registry.Registry, *os.File, error) {
+func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (registry.Filter, error) {
 	MaxNameLen := 4096
 	oobSpace := unix.CmsgSpace(4)
 	stateBuf := make([]byte, 4096)
@@ -24,10 +24,10 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registr
 
 	n, oobn, _, _, err := unix.Recvmsg(sockfd, stateBuf, oob, 0)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if n >= MaxNameLen || oobn != oobSpace {
-		return nil, nil, fmt.Errorf("recvfd: incorrect number of bytes read (n=%d oobn=%d)", n, oobn)
+		return nil, fmt.Errorf("recvfd: incorrect number of bytes read (n=%d oobn=%d)", n, oobn)
 	}
 
 	// Truncate.
@@ -37,28 +37,28 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registr
 	containerProcessState := &specs.ContainerProcessState{}
 	err = json.Unmarshal(stateBuf, containerProcessState)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot parse OCI state: %v\n", err)
+		return nil, fmt.Errorf("cannot parse OCI state: %v\n", err)
 	}
 	seccompFdIndex, ok := containerProcessState.FdIndexes["seccompFd"]
 	if !ok || seccompFdIndex < 0 {
-		return nil, nil, fmt.Errorf("recvfd: didn't receive seccomp fd")
+		return nil, fmt.Errorf("recvfd: didn't receive seccomp fd")
 	}
 
 	scms, err := unix.ParseSocketControlMessage(oob)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(scms) != 1 {
-		return nil, nil, fmt.Errorf("recvfd: number of SCMs is not 1: %d", len(scms))
+		return nil, fmt.Errorf("recvfd: number of SCMs is not 1: %d", len(scms))
 	}
 	scm := scms[0]
 
 	fds, err := unix.ParseUnixRights(&scm)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if seccompFdIndex >= len(fds) {
-		return nil, nil, fmt.Errorf("recvfd: number of fds is %d and seccompFdIndex is %d", len(fds), seccompFdIndex)
+		return nil, fmt.Errorf("recvfd: number of fds is %d and seccompFdIndex is %d", len(fds), seccompFdIndex)
 	}
 	fd := uintptr(fds[seccompFdIndex])
 
@@ -76,22 +76,31 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registr
 		}
 	}
 
-	var reg *registry.Registry
+	var filter registry.Filter
 	if resolver != nil {
-		reg = resolver(containerProcessState)
+		filter = resolver(containerProcessState)
+	} else {
+		filter = registry.NewSimpleFilter()
 	}
+	filter.SetSeccompFile(os.NewFile(fd, fmt.Sprintf("seccomp:[%s]", containerProcessState.State.ID)))
 
-	return reg, os.NewFile(fd, "seccomp-fd"), nil
+	return filter, nil
 }
 
 // notifHandler handles seccomp notifications and responses
-func notifHandler(reg *registry.Registry, seccompFile *os.File) {
+func notifHandler(filter registry.Filter) {
+	seccompFile := filter.SeccompFile()
+	if seccompFile == nil {
+		panic("SeccompFile not set")
+	}
+
 	fd := libseccomp.ScmpFd(seccompFile.Fd())
 	defer func() {
 		log.WithFields(log.Fields{
 			"fd": fd,
 		}).Debug("Closing seccomp fd")
 		seccompFile.Close()
+		seccompFile = nil
 	}()
 
 	for {
@@ -140,10 +149,10 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 			Flags: libseccomp.NotifRespFlagContinue,
 		}
 
-		if reg != nil {
-			handler, ok := reg.SyscallHandler[syscallName]
+		if filter != nil {
+			handler, ok := filter.LookupHandler(syscallName)
 			if ok {
-				result := handler(fd, req)
+				result := handler(filter, req)
 				if result.Intr {
 					log.WithFields(log.Fields{
 						"fd":      fd,
@@ -202,7 +211,7 @@ func StartAgent(socketFile string, resolver registry.ResolverFunc) error {
 			return fmt.Errorf("cannot get socket: %v\n", err)
 		}
 
-		reg, newSeccompFile, err := receiveNewSeccompFile(resolver, int(socket.Fd()))
+		reg, err := receiveNewSeccompFile(resolver, int(socket.Fd()))
 		if err != nil {
 			log.WithFields(log.Fields{
 				"socket": socketFile,
@@ -211,7 +220,7 @@ func StartAgent(socketFile string, resolver registry.ResolverFunc) error {
 		}
 		socket.Close()
 
-		go notifHandler(reg, newSeccompFile)
+		go notifHandler(reg)
 	}
 
 }

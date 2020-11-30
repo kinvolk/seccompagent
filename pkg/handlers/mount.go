@@ -40,50 +40,50 @@ func runMountInNamespaces(param []byte) string {
 }
 
 func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
-	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
+	return func(filter registry.Filter, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		memFile, err := readarg.OpenMem(req.Pid)
 		if err != nil {
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer memFile.Close()
 
-		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		if err := filter.NotifIDValid(req); err != nil {
 			return registry.HandlerResultIntr()
 		}
 
 		source, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"arg": 0,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"arg":    0,
+				"err":    err,
 			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 		dest, err := readarg.ReadString(memFile, int64(req.Data.Args[1]))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"arg": 1,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"arg":    1,
+				"err":    err,
 			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 		filesystem, err := readarg.ReadString(memFile, int64(req.Data.Args[2]))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"arg": 2,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"arg":    2,
+				"err":    err,
 			}).Error("Cannot read argument")
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 
 		log.WithFields(log.Fields{
-			"fd":         fd,
+			"filter":     filter.Name(),
 			"pid":        req.Pid,
 			"source":     source,
 			"dest":       dest,
@@ -106,10 +106,10 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		mntns, err := nsenter.OpenNamespace(req.Pid, "mnt")
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":   fd,
-				"pid":  req.Pid,
-				"kind": "mnt",
-				"err":  err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"kind":   "mnt",
+				"err":    err,
 			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
@@ -118,10 +118,10 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		netns, err := nsenter.OpenNamespace(req.Pid, "net")
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":   fd,
-				"pid":  req.Pid,
-				"kind": "net",
-				"err":  err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"kind":   "net",
+				"err":    err,
 			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
@@ -130,10 +130,10 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		pidns, err := nsenter.OpenNamespace(req.Pid, "pid")
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":   fd,
-				"pid":  req.Pid,
-				"kind": "pid",
-				"err":  err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"kind":   "pid",
+				"err":    err,
 			}).Error("Cannot open namespace")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
@@ -142,9 +142,9 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		root, err := nsenter.OpenRoot(req.Pid)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot open root")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
@@ -153,19 +153,19 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		cwd, err := nsenter.OpenCwd(req.Pid)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"pid": req.Pid,
-				"err": err,
+				"filter": filter.Name(),
+				"pid":    req.Pid,
+				"err":    err,
 			}).Error("Cannot open cwd")
 			return registry.HandlerResultErrno(unix.EPERM)
 		}
 		defer cwd.Close()
 
-		if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+		if err := filter.NotifIDValid(req); err != nil {
 			log.WithFields(log.Fields{
-				"fd":  fd,
-				"req": req,
-				"err": err,
+				"filter": filter.Name(),
+				"req":    req,
+				"err":    err,
 			}).Debug("Notification no longer valid")
 			return registry.HandlerResultIntr()
 		}
@@ -173,7 +173,7 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		output, err := nsenter.Run(root, cwd, mntns, netns, pidns, params)
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":     fd,
+				"filter": filter.Name(),
 				"pid":    req.Pid,
 				"output": output,
 				"err":    err,
@@ -183,7 +183,7 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 		errno, err := strconv.Atoi(string(output))
 		if err != nil {
 			log.WithFields(log.Fields{
-				"fd":     fd,
+				"filter": filter.Name(),
 				"pid":    req.Pid,
 				"output": output,
 				"err":    err,

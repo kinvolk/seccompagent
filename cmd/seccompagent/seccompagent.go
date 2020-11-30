@@ -69,39 +69,41 @@ func main() {
 		// Kubernetes API, find the pod, and allow or deny a syscall depending
 		// on the pod specifications (e.g. namespace, annotations,
 		// serviceAccount).
-		resolver = func(state *specs.ContainerProcessState) *registry.Registry {
-			r := registry.New()
+		resolver = func(state *specs.ContainerProcessState) registry.Filter {
+			f := registry.NewSimpleFilter()
 
 			// Example:
 			// 	/ # mount -t proc proc root
 			// 	/ # ls /root/self/cmdline
 			// 	/root/self/cmdline
 			allowedFilesystems := map[string]struct{}{"proc": struct{}{}}
-			r.Add("mount", handlers.Mount(allowedFilesystems))
+			f.AddHandler("mount", handlers.Mount(allowedFilesystems))
 
 			// Example:
 			// 	# chmod 777 /
 			// 	chmod: /: Bad message
-			r.Add("chmod", handlers.Error(unix.EBADMSG))
+			f.AddHandler("chmod", handlers.Error(unix.EBADMSG))
 
 			// Example:
 			// 	# mkdir /abc
 			// 	# ls -d /abc*
 			// 	/abc-pid-3528098
 			if state != nil {
-				r.Add("mkdir", handlers.MkdirWithSuffix(fmt.Sprintf("-pid-%d", state.State.Pid)))
+				f.AddHandler("mkdir", handlers.MkdirWithSuffix(fmt.Sprintf("-pid-%d", state.State.Pid)))
 			}
 
-			return r
+			return f
 		}
 	case "kubernetes":
-		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) *registry.Registry {
+		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) registry.Filter {
 			log.WithFields(log.Fields{
 				"pod":      podCtx,
 				"metadata": metadata,
 			}).Debug("New container")
 
-			r := registry.New()
+			f := registry.NewSimpleFilter()
+
+			f.AddHandler("chmod", handlers.ErrorSeq())
 
 			if v, ok := metadata["MKDIR_TMPL"]; ok {
 				tmpl, err := template.New("mkdirTmpl").Parse(v)
@@ -109,7 +111,7 @@ func main() {
 					var suffix strings.Builder
 					err = tmpl.Execute(&suffix, podCtx)
 					if err == nil {
-						r.Add("mkdir", handlers.MkdirWithSuffix(suffix.String()))
+						f.AddHandler("mkdir", handlers.MkdirWithSuffix(suffix.String()))
 					}
 				}
 			}
@@ -118,7 +120,7 @@ func main() {
 				d, ok := metadata["EXEC_DURATION"]
 				if ok {
 					duration, _ := time.ParseDuration(d)
-					r.Add("execve", handlers.ExecCondition(fileName, duration))
+					f.AddHandler("execve", handlers.ExecCondition(fileName, duration))
 				}
 			}
 
@@ -126,7 +128,7 @@ func main() {
 				d, ok := metadata["SIDECARS_DELAY"]
 				if ok {
 					duration, _ := time.ParseDuration(d)
-					r.Add("execve", handlers.ExecSidecars(podCtx, sidecars, duration))
+					f.AddHandler("execve", handlers.ExecSidecars(podCtx, sidecars, duration))
 				}
 			}
 
@@ -138,9 +140,9 @@ func main() {
 				allowedFilesystems["sysfs"] = struct{}{}
 			}
 			if len(allowedFilesystems) > 0 {
-				r.Add("mount", handlers.Mount(allowedFilesystems))
+				f.AddHandler("mount", handlers.Mount(allowedFilesystems))
 			}
-			return r
+			return f
 		}
 		var err error
 		resolver, err = kuberesolver.KubeResolver(kubeResolverFunc)
