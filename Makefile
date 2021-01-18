@@ -5,7 +5,6 @@ IMAGE_TAG=$(shell ./tools/image-tag)
 IMAGE_BRANCH_TAG=$(shell ./tools/image-tag branch)
 CONTAINER_REPO ?= quay.io/kinvolk/seccompagent
 
-.PHONY: seccompagent
 seccompagent:
 	$(GO_BUILD) -o seccompagent ./cmd/seccompagent
 
