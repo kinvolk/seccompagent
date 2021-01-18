@@ -23,13 +23,31 @@ git checkout mauricio/seccomp-notify-listener-path
 make all
 ```
 
-Start containerd CRI:
+Get containerd:
 ```
-sudo PATH=/path/to/runc:$PATH _output/containerd --config myconfig.toml
+# Do this in $GOPATH/src/github.com/containerd/, it fails to build otherwise.
+git clone git@github.com:kinvolk/containerd.git
+cd containerd
+git checkout alban_seccomp_notify
+make all
+sudo make install
 ```
 
-Start Kubernetes with local-up-cluster.sh
+Start containerd CRI:
 ```
+# Make sure to not step over the system containerd (if you have it installed)
+# For that you can run:
+# 	bin/containerd config default  > test.toml
+# And modify the `root`, `state` and `grpc.address` paths to use unexistant
+# directories
+sudo PATH=/path/to/runc:$PATH bin/containerd --config test.toml
+```
+
+Clone kubernetes repo and start Kubernetes with local-up-cluster.sh, make sure
+to use Kubernetes >= 1.19:
+```
+# Make sure the endpoints match the values you configured for containerd
+# `grpc.address`
 export CONTAINER_RUNTIME_ENDPOINT=unix:///run/cricontainerd/containerd.sock
 export IMAGE_SERVICE_ENDPOINT=unix:///run/cricontainerd/containerd.sock
 export CONTAINER_RUNTIME=remote
