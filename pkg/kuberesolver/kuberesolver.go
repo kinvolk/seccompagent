@@ -1,7 +1,7 @@
 package kuberesolver
 
 import (
-	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -88,7 +88,7 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 	nodeName := os.Getenv("NODE_NAME")
 	k8sClient, err := k8s.NewK8sClient(nodeName)
 	if err != nil {
-		return nil, errors.New("cannot create kubernetes client")
+		return nil, fmt.Errorf("cannot create kubernetes client: %v", err)
 	}
 
 	return func(state *specs.ContainerProcessState) registry.Filter {

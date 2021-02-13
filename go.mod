@@ -3,11 +3,11 @@ module github.com/kinvolk/seccompagent
 go 1.15
 
 require (
+	github.com/open-policy-agent/opa v0.26.0
 	github.com/opencontainers/runc v0.0.0-00010101000000-000000000000
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
 	github.com/seccomp/libseccomp-golang v0.9.1
 	github.com/sirupsen/logrus v1.7.0
-	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
 	golang.org/x/sys v0.0.0-20201107080550-4d91cf3a1aaf
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect

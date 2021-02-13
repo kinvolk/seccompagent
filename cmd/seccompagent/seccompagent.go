@@ -15,6 +15,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/handlers"
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
+	"github.com/kinvolk/seccompagent/pkg/opa"
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -30,7 +31,7 @@ var (
 
 func init() {
 	flag.StringVar(&socketFile, "socketfile", "/run/seccomp-agent.socket", "Socket file")
-	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes]")
+	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes, opa]")
 	flag.StringVar(&logflags, "log", "info", "log level [trace,debug,info,warn,error,fatal,color,nocolor,json]")
 }
 
@@ -149,6 +150,23 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+	case "opa":
+		kubeResolverFunc := func(podCtx *kuberesolver.PodContext, metadata map[string]string) registry.Filter {
+			log.WithFields(log.Fields{
+				"pod":      podCtx,
+				"metadata": metadata,
+			}).Debug("New container")
+
+			f := opa.NewOpaFilter(podCtx)
+
+			return f
+		}
+		var err error
+		resolver, err = kuberesolver.KubeResolver(kubeResolverFunc)
+		if err != nil {
+			panic(err)
+		}
+
 	default:
 		panic(errors.New("invalid container resolver"))
 	}
