@@ -98,10 +98,12 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: mynotifypod
-  # /var/lib/kubelet/seccomp/notify.json
-  annotations:
-    seccomp.security.alpha.kubernetes.io/pod: localhost/notify.json
 spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      # By default this file is located here: /var/lib/kubelet/seccomp/notify.json
+      localhostProfile: notify.json
   restartPolicy: Never
   containers:
   - name: container1
