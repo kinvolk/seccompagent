@@ -40,6 +40,11 @@ Start containerd CRI:
 # 	bin/containerd config default  > test.toml
 # And modify the `root`, `state` and `grpc.address` paths to use unexistant
 # directories
+# Furthermore, be sure to include sbin in the PATH. Some distros don't have
+# sbin in the PATH for unprivileged users and can cause issues (like unable to
+# find iptables binary). If you find an error when creating pods regarding missing
+# binaries, it is probably this.
+# Another option is to run this as root to have sbin in PATH.
 sudo PATH=/path/to/runc:$PATH bin/containerd --config test.toml
 ```
 
