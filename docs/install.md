@@ -15,7 +15,7 @@ Requirements:
 - container CRI built with runtime-spec revendored from our dev branch
 - Linux 5.9 or more.
 
-Start runc:
+Compile runc:
 ```
 git clone git@github.com:kinvolk/runc.git
 cd runc
