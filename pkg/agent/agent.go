@@ -30,6 +30,12 @@ import (
 
 func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (*registry.Registry, *os.File, error) {
 	MaxNameLen := 4096
+
+	// File descriptors over SCM_RIGHTS are 'int' according to "man cmsg".
+	// The unix golang package assumes that a file descriptor is a int32, see:
+	// https://github.com/golang/sys/blob/68d13333faf2/unix/sockcmsg_unix.go#L66-L73
+	// On Linux and Windows, `int` is always 32 bits, so it's fine:
+	// https://en.wikipedia.org/wiki/64-bit_computing#64-bit_data_models
 	oobSpace := unix.CmsgSpace(4)
 	stateBuf := make([]byte, 4096)
 	oob := make([]byte, oobSpace)
