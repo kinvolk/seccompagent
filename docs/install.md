@@ -10,7 +10,7 @@ Seccomp Agent is a DaemonSet deployed in the cluster and relies on new features 
 ## Installing Seccomp Agent
 
 Requirements:
-- libseccomp-2.5.0 or more.
+- libseccomp >=2.5.0.
 - runc built from our dev branch
 - container CRI built with runtime-spec revendored from our dev branch
 - Linux 5.9 or more.
