@@ -16,6 +16,7 @@ package k8s
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -58,7 +59,7 @@ func NewK8sClient(nodeName string) (*K8sClient, error) {
 func (k *K8sClient) ContainerLookup(pid int) (*v1.Pod, error) {
 	cgroupPathV1, cgroupPathV2, err := getCgroupPaths(pid)
 
-	pods, err := k.clientset.CoreV1().Pods("").List(metav1.ListOptions{
+	pods, err := k.clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
 		FieldSelector: k.fieldSelector,
 	})
 	if err != nil {
