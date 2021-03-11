@@ -34,22 +34,19 @@ type State struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
-// FdIndexKey is the key used in the FdIndexes map of the ContainerProcessState struct.
-type FdIndexKey string
-
 const (
-	// SeccompFdIndexKey is the index of the seccomp notify file descriptor.
-	SeccompFdIndexKey FdIndexKey = "seccompFd"
-	// PidFdIndexKey is the index of the target process file descriptor.
-	PidFdIndexKey FdIndexKey = "pidFd"
+	// SeccompFdName is the name of the seccomp notify file descriptor.
+	SeccompFdName string = "seccompFd"
 )
 
 // ContainerProcessState holds information about the state of a container process.
 type ContainerProcessState struct {
 	// Version is the version of the specification that is supported.
 	Version string `json:"ociVersion"`
-	// FdIndexes is a map containing the indexes of the file descriptors in the `SCM_RIGHTS` array.
-	FdIndexes map[FdIndexKey]int `json:"fdIndexes"`
+	// Fds is a string array containing the names of the file descriptors passed.
+	// The index of the name in this array corresponds to index of the file
+	// descriptor in the `SCM_RIGHTS` array.
+	Fds []string `json:"fds"`
 	// Pid is the process ID as seen by the runtime.
 	Pid int `json:"pid"`
 	// Opaque metadata.

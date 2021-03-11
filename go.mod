@@ -5,7 +5,7 @@ go 1.15
 require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect
-	github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
+	github.com/opencontainers/runtime-spec v1.0.3-0.20210319114652-9c848d91e8cf
 	github.com/seccomp/libseccomp-golang v0.9.1
 	github.com/sirupsen/logrus v1.7.0
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
@@ -16,7 +16,5 @@ require (
 	k8s.io/client-go v0.20.4
 	k8s.io/klog/v2 v2.6.0 // indirect
 )
-
-replace github.com/opencontainers/runtime-spec => github.com/kinvolk/runtime-spec v1.0.2-0.20201110202115-2755fc508653
 
 replace github.com/seccomp/libseccomp-golang => github.com/kinvolk/libseccomp-golang v0.9.2-0.20201113182948-883917843313
