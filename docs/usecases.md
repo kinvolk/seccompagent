@@ -64,3 +64,16 @@ TODO
 
 The Seccomp policy could include a scenario defining which system calls to make
 fail.
+
+## Network Proxy/sniffing/load-balancing
+
+In the future, the seccomp agent can be used to redirect connections to a
+network proxy for debugging. Another option is to sniff the payload sent and
+allow the target to continue afterwards.
+
+In a similar note, if we notify on the connect syscall, we can do a load
+balancing with [quite good performance compared to envoy and haproxy][link] in
+conjuntction with `pidfd_getfd()`. As the link mentions, we can get some info
+with `TCP_INFO` and other stuff.
+
+[link]: https://people.kernel.org/brauner/the-seccomp-notifier-new-frontiers-in-unprivileged-container-development
