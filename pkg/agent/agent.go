@@ -14,6 +14,58 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 )
 
+func closeStateFds(recvFds []int) {
+	// If performance becomes an issue, we can fallback to the new syscall closerange().
+	for i := range recvFds {
+		// Ignore the return code. There isn't anything better to do.
+		unix.Close(i)
+	}
+}
+
+// parseContainerProcessState returns the seccomp-fd and closes the rest of the fds in recvFds.
+// In case of error, all recvFds are closed.
+// StateFds is assumed to be formated as specs.ContainerProcessState.Fds and
+// recvFds the corresponding list of received fds in the same SCM_RIGHT message.
+func parseStateFds(stateFds []string, recvFds []int) (uintptr, error) {
+	// Lets find the index in stateFds of the seccomp-fd.
+	idx := -1
+	err := false
+
+	for i, name := range stateFds {
+		if name == specs.SeccompFdName && idx == -1 {
+			idx = i
+			continue
+		}
+
+		// We found the seccompFdName two times. Error out!
+		if name == specs.SeccompFdName && idx != -1 {
+			err = true
+		}
+	}
+
+	if idx == -1 || err {
+		closeStateFds(recvFds)
+		return 0, fmt.Errorf("seccomp fd not found or malformed containerProcessState.Fds")
+	}
+
+	if idx >= len(recvFds) || idx < 0 {
+		closeStateFds(recvFds)
+		return 0, fmt.Errorf("seccomp fd index out of range")
+	}
+
+	fd := uintptr(recvFds[idx])
+
+	for i := range recvFds {
+		if i == idx {
+			continue
+		}
+
+		unix.Close(recvFds[i])
+	}
+
+	return fd, nil
+}
+
 func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (registry.Filter, error) {
 	MaxNameLen := 4096
 	oobSpace := unix.CmsgSpace(4)
@@ -39,10 +91,6 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (registry
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse OCI state: %v\n", err)
 	}
-	seccompFdIndex, ok := containerProcessState.FdIndexes["seccompFd"]
-	if !ok || seccompFdIndex < 0 {
-		return nil, fmt.Errorf("recvfd: didn't receive seccomp fd")
-	}
 
 	scms, err := unix.ParseSocketControlMessage(oob)
 	if err != nil {
@@ -57,10 +105,11 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (registry
 	if err != nil {
 		return nil, err
 	}
-	if seccompFdIndex >= len(fds) {
-		return nil, fmt.Errorf("recvfd: number of fds is %d and seccompFdIndex is %d", len(fds), seccompFdIndex)
+
+	fd, err := parseStateFds(containerProcessState.Fds, fds)
+	if err != nil {
+		return nil, err
 	}
-	fd := uintptr(fds[seccompFdIndex])
 
 	log.WithFields(log.Fields{
 		"fd":          fd,
@@ -69,12 +118,6 @@ func receiveNewSeccompFile(resolver registry.ResolverFunc, sockfd int) (registry
 		"pid1":        containerProcessState.State.Pid,
 		"annotations": containerProcessState.State.Annotations,
 	}).Debug("New seccomp fd received on socket")
-
-	for i := 0; i < len(fds); i++ {
-		if i != seccompFdIndex {
-			unix.Close(fds[i])
-		}
-	}
 
 	var filter registry.Filter
 	if resolver != nil {

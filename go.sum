@@ -197,6 +197,8 @@ github.com/kinvolk/runc v0.1.1-0.20201126131201-5a620a897292 h1:4QpAU3NWf4YLOlRb
 github.com/kinvolk/runc v0.1.1-0.20201126131201-5a620a897292/go.mod h1:R9zp0d+SHUqekKDZrlxUoZbn3OyXxxSTZ7ZAiJL06Cw=
 github.com/kinvolk/runtime-spec v1.0.2-0.20201110202115-2755fc508653 h1:amSDd4i3F4aNzi9TmDRDjW31ZQ6T9LN1lXVOazoTjQ8=
 github.com/kinvolk/runtime-spec v1.0.2-0.20201110202115-2755fc508653/go.mod h1:x0jDMgm6GEAbohE2lugQZrRwSe07FpeoUJm9jP2a5Sk=
+github.com/kinvolk/runtime-spec v1.0.2-0.20210309175439-58798e75e980 h1:d0LC/se/28Agl/3NeFZSpV1BA3ZXDVTLzp3RDrqTNM0=
+github.com/kinvolk/runtime-spec v1.0.2-0.20210309175439-58798e75e980/go.mod h1:x0jDMgm6GEAbohE2lugQZrRwSe07FpeoUJm9jP2a5Sk=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
 github.com/kisielk/errcheck v1.2.0/go.mod h1:/BMXB+zMLi60iA8Vv6Ksmxu/1UDYcXs4uQLJ+jE2L00=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=

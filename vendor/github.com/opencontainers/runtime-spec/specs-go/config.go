@@ -599,6 +599,7 @@ type VMImage struct {
 // LinuxSeccomp represents syscall restrictions
 type LinuxSeccomp struct {
 	DefaultAction    LinuxSeccompAction `json:"defaultAction"`
+	DefaultErrnoRet  *uint              `json:"defaultErrnoRet,omitempty"`
 	Architectures    []Arch             `json:"architectures,omitempty"`
 	Flags            []LinuxSeccompFlag `json:"flags,omitempty"`
 	ListenerPath     string             `json:"listenerPath,omitempty"`

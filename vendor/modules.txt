@@ -103,7 +103,7 @@ github.com/opencontainers/runc/libcontainer/specconv
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
 github.com/opencontainers/runc/libcontainer/utils
-# github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d => github.com/kinvolk/runtime-spec v1.0.2-0.20201110202115-2755fc508653
+# github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d => github.com/kinvolk/runtime-spec v1.0.2-0.20210309175439-58798e75e980
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/pkg/errors v0.9.1
@@ -326,6 +326,6 @@ k8s.io/klog
 k8s.io/utils/integer
 # sigs.k8s.io/yaml v1.1.0
 sigs.k8s.io/yaml
-# github.com/opencontainers/runtime-spec => github.com/kinvolk/runtime-spec v1.0.2-0.20201110202115-2755fc508653
+# github.com/opencontainers/runtime-spec => github.com/kinvolk/runtime-spec v1.0.2-0.20210309175439-58798e75e980
 # github.com/seccomp/libseccomp-golang => github.com/kinvolk/libseccomp-golang v0.9.2-0.20201113182948-883917843313
 # github.com/opencontainers/runc => github.com/kinvolk/runc v0.1.1-0.20201126131201-5a620a897292

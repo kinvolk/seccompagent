@@ -17,7 +17,7 @@ require (
 	k8s.io/utils v0.0.0-20191114184206-e782cd3c129f // indirect
 )
 
-replace github.com/opencontainers/runtime-spec => github.com/kinvolk/runtime-spec v1.0.2-0.20201110202115-2755fc508653
+replace github.com/opencontainers/runtime-spec => github.com/kinvolk/runtime-spec v1.0.2-0.20210309175439-58798e75e980
 
 replace github.com/seccomp/libseccomp-golang => github.com/kinvolk/libseccomp-golang v0.9.2-0.20201113182948-883917843313
 
