@@ -35,3 +35,9 @@ vendor:
 .PHONY: test
 test:
 	go test -test.v ./...
+
+.PHONY: local-containerd-install
+local-containerd-install:
+	docker build -t local-seccomp-agent .
+	docker save --output local-seccomp-agent.tar local-seccomp-agent
+	sudo ctr --address /run/customcontainerd/containerd.sock --namespace k8s.io images import local-seccomp-agent.tar

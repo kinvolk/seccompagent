@@ -1,16 +1,13 @@
 package opa
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 
-	"github.com/kinvolk/seccompagent/pkg/handlers"
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/readarg"
 	"github.com/kinvolk/seccompagent/pkg/registry"
-	"github.com/open-policy-agent/opa/rego"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -52,6 +49,11 @@ func (f *OpaFilter) SeccompFile() *os.File {
 func (f *OpaFilter) AddHandler(syscallName string, h registry.HandlerFunc) {
 }
 
+var syscallArgs = map[string][6]bool{
+	"mkdir": [6]bool{true, false, false, false, false, false},
+	"mount": [6]bool{true, true, true, false, false, false},
+}
+
 func (f *OpaFilter) LookupHandler(syscallName string) (h registry.HandlerFunc, ok bool) {
 	handler := func(filter registry.Filter, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		result = registry.HandlerResult{Flags: libseccomp.NotifRespFlagContinue}
@@ -66,132 +68,44 @@ func (f *OpaFilter) LookupHandler(syscallName string) (h registry.HandlerFunc, o
 			return registry.HandlerResult{Intr: true}
 		}
 
-		fileName, err := readarg.ReadString(memFile, int64(req.Data.Args[0]))
-		if err != nil {
-			log.WithFields(log.Fields{
-				"filter": filter.Name(),
-				"pid":    req.Pid,
-				"err":    err,
-			}).Error("Cannot read argument")
-			return
+		var args [6]string
+		if argsSet, ok := syscallArgs[syscallName]; ok {
+			for i := 0; i < 6; i++ {
+				if !argsSet[i] {
+					continue
+				}
+
+				args[i], err = readarg.ReadString(memFile, int64(req.Data.Args[i]))
+				if err != nil {
+					log.WithFields(log.Fields{
+						"filter": filter.Name(),
+						"pid":    req.Pid,
+						"i":      i,
+						"err":    err,
+					}).Error("Cannot read argument")
+					return
+				}
+			}
 		}
 
-		input := map[string]interface{}{
+		content, err := ioutil.ReadFile("/etc/seccomp-agent/policies.rego")
+		if err != nil {
+			log.WithFields(log.Fields{
+				"err": err,
+			}).Error("Cannot read policies.rego")
+			result = registry.HandlerResultErrno(unix.ENOSYS)
+			return
+		}
+		policy := string(content)
+
+		result = eval(filter, req, policy, f.podCtx, syscallName, args)
+
+		log.WithFields(log.Fields{
+			"podCtx":  f.podCtx,
 			"syscall": syscallName,
-			"arg0":    fileName,
-			"pod": map[string]interface{}{
-				"namespace": f.podCtx.Namespace,
-				"pod":       f.podCtx.Pod,
-				"container": f.podCtx.Container,
-			},
-		}
-
-		ctx := context.TODO()
-
-		content, err := ioutil.ReadFile("/etc/seccomp-agent/example.rego")
-		if err != nil {
-			log.WithFields(log.Fields{
-				"filename": fileName,
-				"input":    input,
-				"err":      err,
-			}).Error("Cannot read example.rego")
-			result = registry.HandlerResultErrno(unix.ENOSYS)
-			return
-		}
-		module := string(content)
-
-		opaMkdirQuery, err := rego.New(
-			rego.Query("x = data.example.authz.handler_MkdirWithSuffix"),
-			rego.Module("example.rego", module),
-		).PrepareForEval(ctx)
-		results, err := opaMkdirQuery.Eval(ctx, rego.EvalInput(input))
-		log.WithFields(log.Fields{
-			"filename":   fileName,
-			"input":      input,
-			"rego":       module,
-			"opa-result": results,
-			"err":        err,
-		}).Trace("Results of mkdir evaluation")
-		if err == nil && len(results) == 1 {
-			if match, ok := results[0].Bindings["x"].(bool); ok && match {
-				log.WithFields(log.Fields{
-					"filename": fileName,
-					"input":    input,
-					"rego":     module,
-					"err":      err,
-				}).Trace("MkdirWithSuffix match!")
-				result = handlers.MkdirWithSuffix(fmt.Sprintf("%s_%s_%s", f.podCtx.Namespace, f.podCtx.Pod, f.podCtx.Container))(filter, req)
-				return
-			}
-		}
-
-		//		opaMountQuery, err := rego.New(
-		//			rego.Query("x = data.example.authz.handler_Mount"),
-		//			rego.Module("example.rego", module),
-		//		).PrepareForEval(ctx)
-		//		results, err = opaMountQuery.Eval(ctx, rego.EvalInput(input))
-		//		log.WithFields(log.Fields{
-		//			"filename":   fileName,
-		//			"input":      input,
-		//			"rego":       module,
-		//			"opa-result": results,
-		//			"err":        err,
-		//		}).Trace("Results of mount evaluation")
-		//		if err == nil && len(results) == 1 {
-		//			if match, ok := results[0].Bindings["x"].(bool); ok && match {
-		//				log.WithFields(log.Fields{
-		//					"filename": fileName,
-		//					"input":    input,
-		//					"rego":     module,
-		//					"err":      err,
-		//				}).Trace("Mount match!")
-		//				allowedFilesystems := map[string]struct{}{"proc": struct{}{}}
-		//				result = handlers.Mount(allowedFilesystems)(filter, req)
-		//				return
-		//			}
-		//		}
-
-		opaAllowQuery, err := rego.New(
-			rego.Query("x = data.example.authz.allow"),
-			rego.Module("example.rego", module),
-		).PrepareForEval(ctx)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"filename": fileName,
-				"input":    input,
-				"rego":     module,
-				"err":      err,
-			}).Error("Cannot prepare rego for allow evaluation")
-			result = registry.HandlerResultErrno(unix.ENOSYS)
-			return
-		}
-
-		results, err = opaAllowQuery.Eval(ctx, rego.EvalInput(input))
-		if err != nil {
-			// Handle evaluation error.
-			result = registry.HandlerResultErrno(unix.ENOSYS)
-		} else if len(results) == 0 {
-			// Handle undefined result.
-			result = registry.HandlerResultErrno(unix.ENOSYS)
-		} else if allowed, ok := results[0].Bindings["x"].(bool); !ok {
-			// Handle unexpected result type.
-			result = registry.HandlerResultErrno(unix.ENOSYS)
-		} else {
-			// Handle result/decision.
-			// fmt.Printf("%+v", results) => [{Expressions:[true] Bindings:map[x:true]}]
-			if allowed {
-				result = registry.HandlerResultContinue()
-			} else {
-				result = registry.HandlerResultErrno(unix.EPERM)
-			}
-		}
-
-		log.WithFields(log.Fields{
-			"filename":   fileName,
-			"input":      input,
-			"opa-result": results,
-			"result":     result,
-		}).Trace("Opa query")
+			"args":    args,
+			"result":  result,
+		}).Trace("Result from OPA query")
 
 		return
 	}
