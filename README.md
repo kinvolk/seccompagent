@@ -1,9 +1,8 @@
 # Kinvolk Seccomp Agent
 
 The Kinvolk Seccomp Agent is receiving seccomp file descriptors from container runtimes and handling system calls on behalf of the containers.
-Its goal is to support different use cases:
-- unprivileged container builds (procfs mounts with masked entries)
-- support of safe mknod (e.g. /dev/null)
+
+See the [different use cases](docs/usecases.md)
 
 It is possible to write your own seccomp agent with a different behaviour by reusing the packages in the `pkg/` directory.
 The Kinvolk Seccomp Agent is only about 100 lines of code. It relies on different packages:
