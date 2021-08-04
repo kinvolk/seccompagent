@@ -57,6 +57,14 @@ const uint32_t C_ARCH_BAD = ARCH_BAD;
 #define SCMP_ARCH_S390X ARCH_BAD
 #endif
 
+#ifndef SCMP_ARCH_PARISC
+#define SCMP_ARCH_PARISC ARCH_BAD
+#endif
+
+#ifndef SCMP_ARCH_PARISC64
+#define SCMP_ARCH_PARISC64 ARCH_BAD
+#endif
+
 const uint32_t C_ARCH_NATIVE       = SCMP_ARCH_NATIVE;
 const uint32_t C_ARCH_X86          = SCMP_ARCH_X86;
 const uint32_t C_ARCH_X86_64       = SCMP_ARCH_X86_64;
@@ -74,6 +82,8 @@ const uint32_t C_ARCH_PPC64        = SCMP_ARCH_PPC64;
 const uint32_t C_ARCH_PPC64LE      = SCMP_ARCH_PPC64LE;
 const uint32_t C_ARCH_S390         = SCMP_ARCH_S390;
 const uint32_t C_ARCH_S390X        = SCMP_ARCH_S390X;
+const uint32_t C_ARCH_PARISC       = SCMP_ARCH_PARISC;
+const uint32_t C_ARCH_PARISC64     = SCMP_ARCH_PARISC64;
 
 #ifndef SCMP_ACT_LOG
 #define SCMP_ACT_LOG 0x7ffc0000U
@@ -107,12 +117,16 @@ const uint32_t C_ACT_NOTIFY        = SCMP_ACT_NOTIFY;
     (SCMP_VER_MAJOR == 2 && SCMP_VER_MINOR < 4)
 #define SCMP_FLTATR_CTL_LOG _SCMP_FLTATR_MIN
 #endif
+#if SCMP_VER_MAJOR == 2 && SCMP_VER_MINOR < 5
+#define SCMP_FLTATR_CTL_SSB _SCMP_FLTATR_MIN
+#endif
 
 const uint32_t C_ATTRIBUTE_DEFAULT = (uint32_t)SCMP_FLTATR_ACT_DEFAULT;
 const uint32_t C_ATTRIBUTE_BADARCH = (uint32_t)SCMP_FLTATR_ACT_BADARCH;
 const uint32_t C_ATTRIBUTE_NNP     = (uint32_t)SCMP_FLTATR_CTL_NNP;
 const uint32_t C_ATTRIBUTE_TSYNC   = (uint32_t)SCMP_FLTATR_CTL_TSYNC;
 const uint32_t C_ATTRIBUTE_LOG     = (uint32_t)SCMP_FLTATR_CTL_LOG;
+const uint32_t C_ATTRIBUTE_SSB     = (uint32_t)SCMP_FLTATR_CTL_SSB;
 
 const int      C_CMP_NE            = (int)SCMP_CMP_NE;
 const int      C_CMP_LT            = (int)SCMP_CMP_LT;
@@ -260,6 +274,7 @@ const (
 	filterAttrNNP        scmpFilterAttr = iota
 	filterAttrTsync      scmpFilterAttr = iota
 	filterAttrLog        scmpFilterAttr = iota
+	filterAttrSSB        scmpFilterAttr = iota
 )
 
 const (
@@ -267,7 +282,7 @@ const (
 	scmpError C.int = -1
 	// Comparison boundaries to check for architecture validity
 	archStart ScmpArch = ArchNative
-	archEnd   ScmpArch = ArchS390X
+	archEnd   ScmpArch = ArchPARISC64
 	// Comparison boundaries to check for action validity
 	actionStart ScmpAction = ActKill
 	actionEnd   ScmpAction = ActKillProcess
@@ -517,6 +532,10 @@ func archFromNative(a C.uint32_t) (ScmpArch, error) {
 		return ArchS390, nil
 	case C.C_ARCH_S390X:
 		return ArchS390X, nil
+	case C.C_ARCH_PARISC:
+		return ArchPARISC, nil
+	case C.C_ARCH_PARISC64:
+		return ArchPARISC64, nil
 	default:
 		return 0x0, fmt.Errorf("unrecognized architecture %#x", uint32(a))
 	}
@@ -557,6 +576,10 @@ func (a ScmpArch) toNative() C.uint32_t {
 		return C.C_ARCH_S390
 	case ArchS390X:
 		return C.C_ARCH_S390X
+	case ArchPARISC:
+		return C.C_ARCH_PARISC
+	case ArchPARISC64:
+		return C.C_ARCH_PARISC64
 	case ArchNative:
 		return C.C_ARCH_NATIVE
 	default:
@@ -651,6 +674,8 @@ func (a scmpFilterAttr) toNative() uint32 {
 		return uint32(C.C_ATTRIBUTE_TSYNC)
 	case filterAttrLog:
 		return uint32(C.C_ATTRIBUTE_LOG)
+	case filterAttrSSB:
+		return uint32(C.C_ATTRIBUTE_SSB)
 	default:
 		return 0x0
 	}
@@ -710,8 +735,10 @@ func (f *ScmpFilter) getNotifFd() (ScmpFd, error) {
 		return -1, errBadFilter
 	}
 
-	if apiLevel < 5 {
-		return -1, fmt.Errorf("seccomp notification requires API level >= 5; current level = %d", apiLevel)
+	// Ignore error, if not supported returns apiLevel == 0
+	apiLevel, _ := GetAPI()
+	if apiLevel < 6 {
+		return -1, fmt.Errorf("seccomp notification requires API level >= 6; current level = %d", apiLevel)
 	}
 
 	fd := C.seccomp_notify_fd(f.filterCtx)
@@ -723,8 +750,10 @@ func notifReceive(fd ScmpFd) (*ScmpNotifReq, error) {
 	var req *C.struct_seccomp_notif
 	var resp *C.struct_seccomp_notif_resp
 
-	if apiLevel < 5 {
-		return nil, fmt.Errorf("seccomp notification requires API level >= 5; current level = %d", apiLevel)
+	// Ignore error, if not supported returns apiLevel == 0
+	apiLevel, _ := GetAPI()
+	if apiLevel < 6 {
+		return nil, fmt.Errorf("seccomp notification requires API level >= 6; current level = %d", apiLevel)
 	}
 
 	// we only use the request here; the response is unused
@@ -738,16 +767,19 @@ func notifReceive(fd ScmpFd) (*ScmpNotifReq, error) {
 
 	for {
 		retCode, errno := C.seccomp_notify_receive(C.int(fd), req)
+		if retCode == 0 {
+			break
+		}
+
 		if errno == syscall.EINTR {
 			continue
 		}
+
 		if errno == syscall.ENOENT {
 			return nil, errno
 		}
-		if retCode != 0 {
-			return nil, errRc(retCode)
-		}
-		break
+
+		return nil, errRc(retCode)
 	}
 
 	return notifReqFromNative(req)
@@ -757,8 +789,10 @@ func notifRespond(fd ScmpFd, scmpResp *ScmpNotifResp) error {
 	var req *C.struct_seccomp_notif
 	var resp *C.struct_seccomp_notif_resp
 
-	if apiLevel < 5 {
-		return fmt.Errorf("seccomp notification requires API level >= 5; current level = %d", apiLevel)
+	// Ignore error, if not supported returns apiLevel == 0
+	apiLevel, _ := GetAPI()
+	if apiLevel < 6 {
+		return fmt.Errorf("seccomp notification requires API level >= 6; current level = %d", apiLevel)
 	}
 
 	// we only use the reponse here; the request is discarded
@@ -774,38 +808,47 @@ func notifRespond(fd ScmpFd, scmpResp *ScmpNotifResp) error {
 
 	for {
 		retCode, errno := C.seccomp_notify_respond(C.int(fd), resp)
+		if retCode == 0 {
+			break
+		}
+
 		if errno == syscall.EINTR {
 			continue
 		}
+
 		if errno == syscall.ENOENT {
 			return errno
 		}
-		if retCode != 0 {
-			return errRc(retCode)
-		}
-		break
+
+		return errRc(retCode)
 	}
 
 	return nil
 }
 
 func notifIDValid(fd ScmpFd, id uint64) error {
-	if apiLevel < 5 {
-		return fmt.Errorf("seccomp notification requires API level >= 5; current level = %d", apiLevel)
+	// Ignore error, if not supported returns apiLevel == 0
+	apiLevel, _ := GetAPI()
+	if apiLevel < 6 {
+		return fmt.Errorf("seccomp notification requires API level >= 6; current level = %d", apiLevel)
 	}
 
 	for {
 		retCode, errno := C.seccomp_notify_id_valid(C.int(fd), C.uint64_t(id))
+		if retCode == 0 {
+			break
+		}
+
 		if errno == syscall.EINTR {
 			continue
 		}
+
 		if errno == syscall.ENOENT {
 			return errno
 		}
-		if retCode != 0 {
-			return errRc(retCode)
-		}
-		break
+
+		return errRc(retCode)
 	}
+
 	return nil
 }

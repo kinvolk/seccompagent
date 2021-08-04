@@ -10,12 +10,12 @@ Seccomp Agent is a DaemonSet deployed in the cluster and relies on new features 
 ## Installing Seccomp Agent
 
 Requirements:
-- libseccomp-2.5.0 or more.
+- libseccomp >=2.5.0.
 - runc built from our dev branch
 - container CRI built with runtime-spec revendored from our dev branch
 - Linux 5.9 or more.
 
-Start runc:
+Compile runc:
 ```
 git clone git@github.com:kinvolk/runc.git
 cd runc
@@ -40,6 +40,11 @@ Start containerd CRI:
 # 	bin/containerd config default  > test.toml
 # And modify the `root`, `state` and `grpc.address` paths to use unexistant
 # directories
+# Furthermore, be sure to include sbin in the PATH. Some distros don't have
+# sbin in the PATH for unprivileged users and can cause issues (like unable to
+# find iptables binary). If you find an error when creating pods regarding missing
+# binaries, it is probably this.
+# Another option is to run this as root to have sbin in PATH.
 sudo PATH=/path/to/runc:$PATH bin/containerd --config test.toml
 ```
 
@@ -93,10 +98,12 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: mynotifypod
-  # /var/lib/kubelet/seccomp/notify.json
-  annotations:
-    seccomp.security.alpha.kubernetes.io/pod: localhost/notify.json
 spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      # By default this file is located here: /var/lib/kubelet/seccomp/notify.json
+      localhostProfile: notify.json
   restartPolicy: Never
   containers:
   - name: container1

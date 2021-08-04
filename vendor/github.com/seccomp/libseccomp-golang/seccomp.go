@@ -41,12 +41,10 @@ type VersionError struct {
 	minimum string
 }
 
-// Caches the libseccomp API level
-var apiLevel uint
-
 func init() {
 	// This forces the cgo libseccomp to initialize its internal API support state,
-	// which is necessary in order to other seccomp APIs to work correctly.
+	// which is necessary on older versions of libseccomp in order to work
+	// correctly.
 	GetAPI()
 }
 
@@ -184,6 +182,10 @@ const (
 	ArchS390 ScmpArch = iota
 	// ArchS390X represents 64-bit System z/390 syscalls
 	ArchS390X ScmpArch = iota
+	// ArchPARISC represents 32-bit PA-RISC
+	ArchPARISC ScmpArch = iota
+	// ArchPARISC64 represents 64-bit PA-RISC
+	ArchPARISC64 ScmpArch = iota
 )
 
 const (
@@ -198,7 +200,7 @@ const (
 	// ActTrap throws SIGSYS
 	ActTrap ScmpAction = iota
 	// ActNotify triggers a userspace notification. This action is only usable when
-	// libseccomp API level 5 or higher is supported.
+	// libseccomp API level 6 or higher is supported.
 	ActNotify ScmpAction = iota
 	// ActErrno causes the syscall to return a negative error code. This
 	// code can be set with the SetReturnCode method
@@ -249,6 +251,12 @@ const (
 	// CompareMaskedEqual returns true if the argument is equal to the given
 	// value, when masked (bitwise &) against the second given value
 	CompareMaskedEqual ScmpCompareOp = iota
+)
+
+var (
+	// ErrSyscallDoesNotExist represents an error condition where
+	// libseccomp is unable to resolve the syscall
+	ErrSyscallDoesNotExist = fmt.Errorf("could not resolve syscall name")
 )
 
 const (
@@ -302,6 +310,10 @@ func GetArchFromString(arch string) (ScmpArch, error) {
 		return ArchS390, nil
 	case "s390x":
 		return ArchS390X, nil
+	case "parisc":
+		return ArchPARISC, nil
+	case "parisc64":
+		return ArchPARISC64, nil
 	default:
 		return ArchInvalid, fmt.Errorf("cannot convert unrecognized string %q", arch)
 	}
@@ -342,6 +354,10 @@ func (a ScmpArch) String() string {
 		return "s390"
 	case ArchS390X:
 		return "s390x"
+	case ArchPARISC:
+		return "parisc"
+	case ArchPARISC64:
+		return "parisc64"
 	case ArchNative:
 		return "native"
 	case ArchInvalid:
@@ -430,14 +446,9 @@ func GetLibraryVersion() (major, minor, micro uint) {
 // Returns a positive int containing the API level, or 0 with an error if the
 // API level could not be detected due to the library being older than v2.4.0.
 // See the seccomp_api_get(3) man page for details on available API levels:
-// https://github.com/seccomp/libseccomp/blob/master/doc/man/man3/seccomp_api_get.3
+// https://github.com/seccomp/libseccomp/blob/main/doc/man/man3/seccomp_api_get.3
 func GetAPI() (uint, error) {
-	api, err := getAPI()
-	if err != nil {
-		return api, err
-	}
-	apiLevel = api
-	return api, err
+	return getAPI()
 }
 
 // SetAPI forcibly sets the API level. General use of this function is strongly
@@ -445,13 +456,9 @@ func GetAPI() (uint, error) {
 // Returns an error if the API level could not be set. An error is always
 // returned if the library is older than v2.4.0
 // See the seccomp_api_get(3) man page for details on available API levels:
-// https://github.com/seccomp/libseccomp/blob/master/doc/man/man3/seccomp_api_get.3
+// https://github.com/seccomp/libseccomp/blob/main/doc/man/man3/seccomp_api_get.3
 func SetAPI(api uint) error {
-	if err := setAPI(api); err != nil {
-		return err
-	}
-	apiLevel = api
-	return nil
+	return setAPI(api)
 }
 
 // Syscall functions
@@ -476,7 +483,7 @@ func (s ScmpSyscall) GetNameByArch(arch ScmpArch) (string, error) {
 
 	cString := C.seccomp_syscall_resolve_num_arch(arch.toNative(), C.int(s))
 	if cString == nil {
-		return "", fmt.Errorf("could not resolve syscall name for %#x", int32(s))
+		return "", ErrSyscallDoesNotExist
 	}
 	defer C.free(unsafe.Pointer(cString))
 
@@ -499,7 +506,7 @@ func GetSyscallFromName(name string) (ScmpSyscall, error) {
 
 	result := C.seccomp_syscall_resolve_name(cString)
 	if result == scmpError {
-		return 0, fmt.Errorf("could not resolve name to syscall: %q", name)
+		return 0, ErrSyscallDoesNotExist
 	}
 
 	return ScmpSyscall(result), nil
@@ -523,7 +530,7 @@ func GetSyscallFromNameByArch(name string, arch ScmpArch) (ScmpSyscall, error) {
 
 	result := C.seccomp_syscall_resolve_name_arch(arch.toNative(), cString)
 	if result == scmpError {
-		return 0, fmt.Errorf("could not resolve name to syscall: %q on %v", name, arch)
+		return 0, ErrSyscallDoesNotExist
 	}
 
 	return ScmpSyscall(result), nil
@@ -597,9 +604,7 @@ type ScmpFilter struct {
 }
 
 // NewFilter creates and returns a new filter context.  Accepts a default action to be
-// taken for syscalls which match no rules in the filter. The newly created filter applies
-// to all threads of the calling process. Use SetTsync() to change this behavior prior to
-// loading the filter.
+// taken for syscalls which match no rules in the filter.
 // Returns a reference to a valid filter context, or nil and an error
 // if the filter context could not be created or an invalid default action was given.
 func NewFilter(defaultAction ScmpAction) (*ScmpFilter, error) {
@@ -629,27 +634,6 @@ func NewFilter(defaultAction ScmpAction) (*ScmpFilter, error) {
 	}
 
 	return filter, nil
-}
-
-// SetTsync sets or clears the filter's thread-sync (TSYNC) attribute. When set, this attribute
-// tells the kernel to synchronize all threads of the calling process to the same seccomp filter.
-// When using filters with the seccomp notification action (ActNotify), the TSYNC attribute
-// must be cleared prior to loading the filter. Refer to the seccomp manual page (seccomp(2)) for
-// further details.
-func (f *ScmpFilter) SetTsync(val bool) error {
-	var cval C.uint32_t
-
-	if val == true {
-		cval = 1
-	} else {
-		cval = 0
-	}
-
-	err := f.setFilterAttr(filterAttrTsync, cval)
-	if err != nil && val == false && err == syscall.ENOTSUP {
-		return nil
-	}
-	return err
 }
 
 // IsValid determines whether a filter context is valid to use.
@@ -890,6 +874,8 @@ func (f *ScmpFilter) GetNoNewPrivsBit() (bool, error) {
 func (f *ScmpFilter) GetLogBit() (bool, error) {
 	log, err := f.getFilterAttr(filterAttrLog)
 	if err != nil {
+		// Ignore error, if not supported returns apiLevel == 0
+		apiLevel, _ := GetAPI()
 		if apiLevel < 3 {
 			return false, fmt.Errorf("getting the log bit is only supported in libseccomp 2.4.0 and newer with API level 3 or higher")
 		}
@@ -898,6 +884,30 @@ func (f *ScmpFilter) GetLogBit() (bool, error) {
 	}
 
 	if log == 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// GetSSB returns the current state the SSB bit will be set to on the filter
+// being loaded, or an error if an issue was encountered retrieving the value.
+// The SSB bit tells the kernel that a seccomp user is not interested in enabling
+// Speculative Store Bypass mitigation.
+// The SSB bit is only usable when libseccomp API level 4 or higher is
+// supported.
+func (f *ScmpFilter) GetSSB() (bool, error) {
+	ssb, err := f.getFilterAttr(filterAttrSSB)
+	if err != nil {
+		api, apiErr := getAPI()
+		if (apiErr != nil && api == 0) || (apiErr == nil && api < 4) {
+			return false, fmt.Errorf("getting the SSB flag is only supported in libseccomp 2.5.0 and newer with API level 4 or higher")
+		}
+
+		return false, err
+	}
+
+	if ssb == 0 {
 		return false, nil
 	}
 
@@ -943,8 +953,32 @@ func (f *ScmpFilter) SetLogBit(state bool) error {
 
 	err := f.setFilterAttr(filterAttrLog, toSet)
 	if err != nil {
+		// Ignore error, if not supported returns apiLevel == 0
+		apiLevel, _ := GetAPI()
 		if apiLevel < 3 {
 			return fmt.Errorf("setting the log bit is only supported in libseccomp 2.4.0 and newer with API level 3 or higher")
+		}
+	}
+
+	return err
+}
+
+// SetSSB sets the state of the SSB bit, which will be applied on filter
+// load, or an error if an issue was encountered setting the value.
+// The SSB bit is only usable when libseccomp API level 4 or higher is
+// supported.
+func (f *ScmpFilter) SetSSB(state bool) error {
+	var toSet C.uint32_t = 0x0
+
+	if state {
+		toSet = 0x1
+	}
+
+	err := f.setFilterAttr(filterAttrSSB, toSet)
+	if err != nil {
+		api, apiErr := getAPI()
+		if (apiErr != nil && api == 0) || (apiErr == nil && api < 4) {
+			return fmt.Errorf("setting the SSB flag is only supported in libseccomp 2.5.0 and newer with API level 4 or higher")
 		}
 	}
 
