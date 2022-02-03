@@ -58,6 +58,7 @@ func HandlerResultSuccess() HandlerResult {
 
 type Registry struct {
 	SyscallHandler map[string]HandlerFunc
+	DefaultHandler HandlerFunc
 }
 
 type ResolverFunc func(state *specs.ContainerProcessState) *Registry
@@ -68,6 +69,10 @@ func New() *Registry {
 	}
 }
 
-func (r *Registry) Add(name string, f HandlerFunc) {
-	r.SyscallHandler[name] = f
+func (r *Registry) Lookup(name string) HandlerFunc {
+	f, ok := r.SyscallHandler[name]
+	if ok {
+		return f
+	}
+	return r.DefaultHandler
 }
