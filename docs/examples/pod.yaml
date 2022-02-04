@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost
+      # When using SPO
+      localhostProfile: operator/default/notify-dangerous.json
+      # When installing the policy manually in /var/lib/kubelet/seccomp/notify-dangerous.json
+      #localhostProfile: notify-dangerous.json
+  restartPolicy: Never
+  containers:
+  - name: container1
+    image: busybox
+    command: ["sh"]
+    args: ["-c", "sleep infinity"]
