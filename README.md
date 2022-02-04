@@ -45,8 +45,6 @@ chmod: /: Bad message
 
 This demo shows that the Seccomp Agent can have different behaviour depending on the Kubernetes pod (in this case, the pod's namespace and name).
 
-* Run containerd/cri with from the `alban_seccomp_demo` branch.
-
 * Install a seccomp policy: `/var/lib/kubelet/seccomp/notify.json`
 ```
 {
