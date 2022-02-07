@@ -91,19 +91,19 @@ func main() {
 			// 	/ # ls /root/self/cmdline
 			// 	/root/self/cmdline
 			allowedFilesystems := map[string]struct{}{"proc": struct{}{}}
-			r.Add("mount", handlers.Mount(allowedFilesystems))
+			r.SyscallHandler["mount"] = handlers.Mount(allowedFilesystems)
 
 			// Example:
 			// 	# chmod 777 /
 			// 	chmod: /: Bad message
-			r.Add("chmod", handlers.Error(unix.EBADMSG))
+			r.SyscallHandler["chmod"] = handlers.Error(unix.EBADMSG)
 
 			// Example:
 			// 	# mkdir /abc
 			// 	# ls -d /abc*
 			// 	/abc-pid-3528098
 			if state != nil {
-				r.Add("mkdir", handlers.MkdirWithSuffix(fmt.Sprintf("-pid-%d", state.State.Pid)))
+				r.SyscallHandler["mkdir"] = handlers.MkdirWithSuffix(fmt.Sprintf("-pid-%d", state.State.Pid))
 			}
 
 			return r
@@ -117,13 +117,28 @@ func main() {
 
 			r := registry.New()
 
+			if v, ok := metadata["DEFAULT_ACTION"]; ok {
+				switch v {
+				// DEFAULT_ACTION=kill-container differs from SCMP_ACT_KILL_PROCESS that
+				// it kills the pid1 of the container, terminating all processes of the
+				// container instead of just the process making the syscall.
+				case "kill-container":
+					r.DefaultHandler = handlers.KillContainer(podCtx.Pid1)
+				default:
+					log.WithFields(log.Fields{
+						"pod":            podCtx,
+						"default-action": v,
+					}).Error("Invalid default action")
+				}
+			}
+
 			if v, ok := metadata["MKDIR_TMPL"]; ok {
 				tmpl, err := template.New("mkdirTmpl").Parse(v)
 				if err == nil {
 					var suffix strings.Builder
 					err = tmpl.Execute(&suffix, podCtx)
 					if err == nil {
-						r.Add("mkdir", handlers.MkdirWithSuffix(suffix.String()))
+						r.SyscallHandler["mkdir"] = handlers.MkdirWithSuffix(suffix.String())
 					}
 				}
 			}
@@ -132,7 +147,7 @@ func main() {
 				d, ok := metadata["EXEC_DURATION"]
 				if ok {
 					duration, _ := time.ParseDuration(d)
-					r.Add("execve", handlers.ExecCondition(fileName, duration))
+					r.SyscallHandler["execve"] = handlers.ExecCondition(fileName, duration)
 				}
 			}
 
@@ -140,7 +155,7 @@ func main() {
 				d, ok := metadata["SIDECARS_DELAY"]
 				if ok {
 					duration, _ := time.ParseDuration(d)
-					r.Add("execve", handlers.ExecSidecars(podCtx, sidecars, duration))
+					r.SyscallHandler["execve"] = handlers.ExecSidecars(podCtx, sidecars, duration)
 				}
 			}
 
@@ -152,7 +167,7 @@ func main() {
 				allowedFilesystems["sysfs"] = struct{}{}
 			}
 			if len(allowedFilesystems) > 0 {
-				r.Add("mount", handlers.Mount(allowedFilesystems))
+				r.SyscallHandler["mount"] = handlers.Mount(allowedFilesystems)
 			}
 			return r
 		}

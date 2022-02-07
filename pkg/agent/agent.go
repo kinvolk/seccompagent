@@ -207,8 +207,8 @@ func notifHandler(reg *registry.Registry, seccompFile *os.File) {
 		}
 
 		if reg != nil {
-			handler, ok := reg.SyscallHandler[syscallName]
-			if ok {
+			handler := reg.Lookup(syscallName)
+			if handler != nil {
 				result := handler(fd, req)
 				if result.Intr {
 					log.WithFields(log.Fields{
