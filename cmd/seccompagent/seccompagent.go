@@ -124,6 +124,8 @@ func main() {
 				// container instead of just the process making the syscall.
 				case "kill-container":
 					r.DefaultHandler = handlers.KillContainer(podCtx.Pid1)
+				case "freeze-container":
+					r.DefaultHandler = handlers.FreezeContainer(podCtx.Pid1)
 				default:
 					log.WithFields(log.Fields{
 						"pod":            podCtx,

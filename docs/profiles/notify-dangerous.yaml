@@ -9,7 +9,8 @@ spec:
   architectures:
   - SCMP_ARCH_X86_64
   listenerPath: "/run/seccomp-agent.socket"
-  listenerMetadata: "DEFAULT_ACTION=kill-container"
+  #listenerMetadata: "DEFAULT_ACTION=kill-container"
+  listenerMetadata: "DEFAULT_ACTION=freeze-container"
 
   syscalls:
 
