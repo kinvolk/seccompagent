@@ -120,7 +120,7 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 				"container": podCtx.Container,
 				"err":       err,
 			}).Trace("Pod details found from annotations")
-			return f(nil, vars)
+			return f(podCtx, vars)
 		}
 
 		pod, err := k8sClient.ContainerLookup(state.State.Pid)
@@ -129,7 +129,7 @@ func KubeResolver(f KubeResolverFunc) (registry.ResolverFunc, error) {
 				"pid": state.State.Pid,
 				"err": err,
 			}).Error("Cannot find container in Kubernetes")
-			return f(nil, vars)
+			return f(podCtx, vars)
 		}
 		podCtx.Namespace = pod.ObjectMeta.Namespace
 		podCtx.Pod = pod.ObjectMeta.Name
