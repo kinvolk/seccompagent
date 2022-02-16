@@ -51,6 +51,9 @@ spec:
               fieldRef:
                 fieldPath: spec.nodeName
         securityContext:
+          # We need to keep 'privileged' to opt out of cgroupns, so we can
+          # inspect containers' cgroups via their /proc/$pid/cgroup files.
+          privileged: true
           capabilities:
             add:
             # CAP_SYS_PTRACE is useful to read arguments of a processes with
@@ -65,6 +68,10 @@ spec:
           mountPath: /host/seccomp
         - name: run
           mountPath: /run
+        # the freezer handler needs write access to the cgroup filesystems to
+        # write "FROZEN" on "freezer.state" interface file.
+        - name: cgroup
+          mountPath: /sys/fs/cgroup
       tolerations:
       - effect: NoSchedule
         operator: Exists
@@ -77,3 +84,6 @@ spec:
       - name: run
         hostPath:
           path: /run
+      - name: cgroup
+        hostPath:
+          path: /sys/fs/cgroup
