@@ -28,3 +28,7 @@ vendor:
 .PHONY: test
 test:
 	go test -test.v ./...
+
+.PHONY: falco-plugin
+falco-plugin:
+	DOCKER_BUILDKIT=1 docker build -f falco-plugin/Dockerfile --output=falco-plugin/ .
