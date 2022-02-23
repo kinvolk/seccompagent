@@ -5,6 +5,7 @@ IMAGE_TAG=$(shell ./tools/image-tag)
 IMAGE_BRANCH_TAG=$(shell ./tools/image-tag branch)
 CONTAINER_REPO ?= quay.io/kinvolk/seccompagent
 
+.PHONY: seccompagent
 seccompagent:
 	$(GO_BUILD) -o seccompagent ./cmd/seccompagent
 
@@ -27,3 +28,7 @@ vendor:
 .PHONY: test
 test:
 	go test -test.v ./...
+
+.PHONY: falco-plugin
+falco-plugin:
+	DOCKER_BUILDKIT=1 docker build -f falco-plugin/Dockerfile --output=falco-plugin/ .

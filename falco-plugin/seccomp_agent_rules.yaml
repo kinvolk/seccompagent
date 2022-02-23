@@ -1,0 +1,9 @@
+- required_engine_version: 11
+
+- rule: Seccomp Agent
+  desc: Seccomp Agent
+  condition: seccompagent.syscall != ""
+  output: id=%seccompagent.id pid=%seccompagent.pid syscall=%seccompagent.syscall k8s=(namespace=%seccompagent.k8s.namespace pod=%seccompagent.k8s.pod container=%seccompagent.k8s.container pid=%seccompagent.k8s.pid pidfilter=%seccompagent.k8s.pidfilter)
+  priority: DEBUG
+  source: seccompagent
+  tags: [seccompagent]

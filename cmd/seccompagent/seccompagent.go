@@ -27,6 +27,7 @@ import (
 
 	"github.com/kinvolk/seccompagent/pkg/agent"
 	"github.com/kinvolk/seccompagent/pkg/handlers"
+	"github.com/kinvolk/seccompagent/pkg/handlers/falco"
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/registry"
@@ -116,6 +117,20 @@ func main() {
 			}).Debug("New container")
 
 			r := registry.New()
+
+			if v, ok := metadata["MIDDLEWARE"]; ok {
+				for _, middleware := range strings.Split(v, ",") {
+					switch middleware {
+					case "falco":
+						r.MiddlewareHandlers = append(r.MiddlewareHandlers, falco.NotifyFalco(podCtx))
+					default:
+						log.WithFields(log.Fields{
+							"pod":        podCtx,
+							"middleware": middleware,
+						}).Error("Invalid middleware")
+					}
+				}
+			}
 
 			if v, ok := metadata["DEFAULT_ACTION"]; ok {
 				switch v {

@@ -4,7 +4,7 @@
     "SCMP_ARCH_X86_64"
   ],
   "listenerPath": "/run/seccomp-agent.socket",
-  "listenerMetadata": "DEFAULT_ACTION=freeze-container",
+  "listenerMetadata": "DEFAULT_ACTION=kill-container\nMIDDLEWARE=falco",
   "syscalls": [
     {
       "action": "SCMP_ACT_NOTIFY",
