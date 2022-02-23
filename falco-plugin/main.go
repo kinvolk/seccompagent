@@ -205,6 +205,7 @@ func (seccompAgentInstance *SeccompAgentInstance) NextBatch(pState sdk.PluginSta
 }
 
 func (seccompAgentInstance *SeccompAgentInstance) Close() {
+        // TODO: Check if we need to close the channels on the sender side (not here)?
 	seccompAgentInstance.ctx.Done()
 }
 
