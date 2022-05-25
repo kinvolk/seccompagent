@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package source provides high-level constructs to easily build
-// source plugins.
+// plugins with event sourcing capability.
 package source
 
 import (
@@ -34,13 +34,13 @@ import (
 
 var registered = false
 
-// Plugin is an interface representing a source plugin.
+// Plugin is an interface representing a plugin with event sourcing capability
 type Plugin interface {
 	plugins.Plugin
-	sdk.Stringer
 	sdk.StringerBuffer
 	sdk.OpenParamsBuffer
 	// (optional) sdk.OpenParams
+	// (optional) sdk.Stringer
 
 	//
 	// Open opens the source and starts a capture (e.g. stream of events).
@@ -63,7 +63,7 @@ type Plugin interface {
 }
 
 // Instance is an interface representing a source capture session instance
-// returned by a call to Open of a source plugin.
+// returned by a call to Open of a plugin with event sourcing capability.
 //
 // Implementations of this interface must implement sdk.NextBatcher, and can
 // optionally implement sdk.Closer and sdk.Progresser.
@@ -85,24 +85,16 @@ type BaseInstance struct {
 	plugins.BaseProgress
 }
 
-// Register registers a Plugin source plugin in the framework. This function
+// Register registers a Plugin in the framework. This function
 // needs to be called in a Go init() function. Calling this function more than
 // once will cause a panic.
 //
-// Register registers a source plugin in the SDK. In order to
-// register a source plugin with optional extraction capabilities, the
-// extractor.Register function must be called by passing the same Plugin
-// argument. In this case, the order in which Register and extractor.Register
-// are called in the init() function is not relevant. This is needed for the
-// framework to notice that the source plugin implements the extraction-related
-// methods.
 func Register(p Plugin) {
 	if registered {
 		panic("plugin-sdk-go/sdk/plugins/source: register can be called only once")
 	}
 
 	i := p.Info()
-	info.SetType(sdk.TypeSourcePlugin)
 	info.SetId(i.ID)
 	info.SetName(i.Name)
 	info.SetDescription(i.Description)
@@ -110,7 +102,6 @@ func Register(p Plugin) {
 	info.SetContact(i.Contact)
 	info.SetVersion(i.Version)
 	info.SetRequiredAPIVersion(i.RequiredAPIVersion)
-	info.SetExtractEventSources(i.ExtractEventSources)
 	if initSchema, ok := p.(sdk.InitSchema); ok {
 		initschema.SetInitSchema(initSchema.InitSchema())
 	}

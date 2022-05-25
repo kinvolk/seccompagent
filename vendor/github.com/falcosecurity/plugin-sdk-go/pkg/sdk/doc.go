@@ -25,11 +25,12 @@ limitations under the License.
 // (https://falco.org/docs/plugins/developers_guide/#example-go-plugin-dummy)
 // of a plugin written in Go that uses this package.
 //
-// For a quick start, you can refer to the provided examples of extractor plugin
+// For a quick start, you can refer to the provided examples of plugins with
+// field extraction capability
 // (https://github.com/falcosecurity/plugin-sdk-go/tree/main/examples/extractor),
-// source plugin
+// with event sourcing capability,
 // (https://github.com/falcosecurity/plugin-sdk-go/tree/main/examples/source),
-// and source plugin with extraction
+// and with both
 // (https://github.com/falcosecurity/plugin-sdk-go/tree/main/examples/full).
 //
 // This SDK is designed to be layered with different levels of abstraction:

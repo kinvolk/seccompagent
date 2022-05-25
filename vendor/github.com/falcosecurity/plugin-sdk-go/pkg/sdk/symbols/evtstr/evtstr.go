@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // This package exports the following C function:
-// - char* plugin_event_to_string(ss_plugin_t *s, const uint8_t *data, uint32_t datalen)
+// - char* plugin_event_to_string(ss_plugin_t *s, const ss_plugin_event *evt)
 //
 // The exported plugin_event_to_string requires that s to be a handle
 // of cgo.Handle from this SDK. The value of the s handle must implement
@@ -27,33 +27,28 @@ limitations under the License.
 package evtstr
 
 /*
-#include <stdint.h>
+#include "../../plugin_info.h"
 */
 import "C"
 import (
 	"unsafe"
 
 	"github.com/falcosecurity/plugin-sdk-go/pkg/cgo"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/ptr"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk"
 )
 
 //export plugin_event_to_string
-func plugin_event_to_string(pState C.uintptr_t, data *C.uint8_t, datalen uint32) *C.char {
-	pHandle := cgo.Handle(pState)
-	evtStringer := pHandle.Value().(sdk.Stringer)
-	buf := pHandle.Value().(sdk.StringerBuffer).StringerBuffer()
-	brw, err := ptr.NewBytesReadWriter(unsafe.Pointer(data), int64(datalen), int64(datalen))
-
-	if err != nil {
-		buf.Write(err.Error())
-	} else {
-		if str, err := evtStringer.String(brw); err == nil {
+func plugin_event_to_string(pState C.uintptr_t, evt *C.ss_plugin_event) *C.char {
+	buf := cgo.Handle(pState).Value().(sdk.StringerBuffer).StringerBuffer()
+	stringer, ok := cgo.Handle(pState).Value().(sdk.Stringer)
+	if ok {
+		if str, err := stringer.String(sdk.NewEventReader(unsafe.Pointer(evt))); err == nil {
 			buf.Write(str)
 		} else {
 			buf.Write(err.Error())
 		}
+	} else {
+		buf.Write("")
 	}
-
 	return (*C.char)(buf.CharPtr())
 }

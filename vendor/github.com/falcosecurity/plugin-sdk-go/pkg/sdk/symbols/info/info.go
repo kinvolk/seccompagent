@@ -30,6 +30,9 @@ limitations under the License.
 // your plugin exports those symbols by other means.
 package info
 
+/*
+#include "info.h"
+*/
 import "C"
 import (
 	"encoding/json"
@@ -48,19 +51,6 @@ var (
 	pEventSource         ptr.StringBuffer
 	pExtractEventSources ptr.StringBuffer
 )
-
-//export plugin_get_type
-func plugin_get_type() uint32 {
-	return pType
-}
-
-func SetType(t uint32) {
-	pType = t
-}
-
-func Type() uint32 {
-	return pType
-}
 
 //export plugin_get_id
 func plugin_get_id() uint32 {
@@ -109,6 +99,9 @@ func SetVersion(version string) {
 
 //export plugin_get_required_api_version
 func plugin_get_required_api_version() *C.char {
+	if pRequiredAPIVersion.String() == "" {
+		return C.get_default_required_api_version()
+	}
 	return (*C.char)(pRequiredAPIVersion.CharPtr())
 }
 
