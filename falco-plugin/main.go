@@ -52,9 +52,12 @@ type SeccompAgentInstance struct {
 
 // init function is used for referencing our plugin to the Falco plugin framework
 func init() {
-	p := &SeccompAgentPlugin{}
-	extractor.Register(p)
-	source.Register(p)
+	plugins.SetFactory(func() plugins.Plugin {
+		p := &SeccompAgentPlugin{}
+		extractor.Register(p)
+		source.Register(p)
+		return p
+	})
 }
 
 // Info displays information of the plugin to Falco plugin framework

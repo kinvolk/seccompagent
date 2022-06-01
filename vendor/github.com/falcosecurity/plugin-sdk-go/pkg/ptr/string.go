@@ -90,5 +90,8 @@ func (s *StringBuffer) String() string {
 }
 
 func (s *StringBuffer) Free() {
-	C.free(unsafe.Pointer(s.cPtr))
+	if s.cPtr != nil {
+		C.free(unsafe.Pointer(s.cPtr))
+		s.cPtr = nil
+	}
 }

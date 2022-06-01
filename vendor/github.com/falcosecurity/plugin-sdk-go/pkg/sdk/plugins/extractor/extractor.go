@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2021 The Falco Authors.
+Copyright (C) 2022 The Falco Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,13 +25,8 @@ import (
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/extract"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/fields"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/info"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initialize"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initschema"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/lasterr"
 )
-
-var registered = false
 
 // Plugin is an interface representing a plugin with field extraction capability.
 type Plugin interface {
@@ -43,41 +38,21 @@ type Plugin interface {
 	Fields() []sdk.FieldEntry
 }
 
-// Register registers a Plugin in the framework. This function
-// needs to be called in a Go init() function. Calling this function more than
-// once will cause a panic.
-//
-func Register(p Plugin) {
-	if registered {
-		panic("plugin-sdk-go/sdk/plugins/extractor: register can be called only once")
-	}
+func enableAsync(handle cgo.Handle) {
+	extract.StartAsync()
+	hooks.SetOnBeforeDestroy(func(handle cgo.Handle) {
+		extract.StopAsync()
+	})
+}
 
-	i := p.Info()
-	info.SetId(i.ID)
-	info.SetName(i.Name)
-	info.SetDescription(i.Description)
-	info.SetContact(i.Contact)
-	info.SetVersion(i.Version)
-	info.SetRequiredAPIVersion(i.RequiredAPIVersion)
-	info.SetExtractEventSources(i.ExtractEventSources)
-	if initSchema, ok := p.(sdk.InitSchema); ok {
-		initschema.SetInitSchema(initSchema.InitSchema())
-	}
+// Register registers the field extraction capability in the framework for the given Plugin.
+//
+// This function should be called from the provided plugins.FactoryFunc implementation.
+// See the parent package for more detail. This function is idempotent.
+func Register(p Plugin) {
 
 	fields.SetFields(p.Fields())
 
-	initialize.SetOnInit(func(c string) (sdk.PluginState, error) {
-		err := p.Init(c)
-		return p, err
-	})
-
 	// setup hooks for automatically start/stop async extraction
-	hooks.SetOnAfterInit(func(handle cgo.Handle) {
-		extract.StartAsync()
-		hooks.SetOnBeforeDestroy(func(handle cgo.Handle) {
-			extract.StopAsync()
-		})
-	})
-
-	registered = true
+	hooks.SetOnAfterInit(enableAsync)
 }

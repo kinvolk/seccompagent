@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2021 The Falco Authors.
+Copyright (C) 2022 The Falco Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,17 +22,12 @@ import (
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/evtstr"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/info"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initialize"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initschema"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/lasterr"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/listopen"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/nextbatch"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/open"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/progress"
 )
-
-var registered = false
 
 // Plugin is an interface representing a plugin with event sourcing capability
 type Plugin interface {
@@ -85,35 +80,12 @@ type BaseInstance struct {
 	plugins.BaseProgress
 }
 
-// Register registers a Plugin in the framework. This function
-// needs to be called in a Go init() function. Calling this function more than
-// once will cause a panic.
+// Register registers the event sourcing capability in the framework for the given Plugin.
 //
+// This function should be called from the provided plugins.FactoryFunc implementation.
+// See the parent package for more detail. This function is idempotent.
 func Register(p Plugin) {
-	if registered {
-		panic("plugin-sdk-go/sdk/plugins/source: register can be called only once")
-	}
-
-	i := p.Info()
-	info.SetId(i.ID)
-	info.SetName(i.Name)
-	info.SetDescription(i.Description)
-	info.SetEventSource(i.EventSource)
-	info.SetContact(i.Contact)
-	info.SetVersion(i.Version)
-	info.SetRequiredAPIVersion(i.RequiredAPIVersion)
-	if initSchema, ok := p.(sdk.InitSchema); ok {
-		initschema.SetInitSchema(initSchema.InitSchema())
-	}
-
-	initialize.SetOnInit(func(c string) (sdk.PluginState, error) {
-		err := p.Init(c)
-		return p, err
-	})
-
 	open.SetOnOpen(func(c string) (sdk.InstanceState, error) {
 		return p.Open(c)
 	})
-
-	registered = true
 }
