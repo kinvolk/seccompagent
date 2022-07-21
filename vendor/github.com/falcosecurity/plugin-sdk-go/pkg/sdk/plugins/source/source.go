@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2021 The Falco Authors.
+Copyright (C) 2022 The Falco Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,16 +15,13 @@ limitations under the License.
 */
 
 // Package source provides high-level constructs to easily build
-// source plugins.
+// plugins with event sourcing capability.
 package source
 
 import (
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/evtstr"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/info"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initialize"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initschema"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/lasterr"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/listopen"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/nextbatch"
@@ -32,15 +29,13 @@ import (
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/progress"
 )
 
-var registered = false
-
-// Plugin is an interface representing a source plugin.
+// Plugin is an interface representing a plugin with event sourcing capability
 type Plugin interface {
 	plugins.Plugin
-	sdk.Stringer
 	sdk.StringerBuffer
 	sdk.OpenParamsBuffer
 	// (optional) sdk.OpenParams
+	// (optional) sdk.Stringer
 
 	//
 	// Open opens the source and starts a capture (e.g. stream of events).
@@ -63,7 +58,7 @@ type Plugin interface {
 }
 
 // Instance is an interface representing a source capture session instance
-// returned by a call to Open of a source plugin.
+// returned by a call to Open of a plugin with event sourcing capability.
 //
 // Implementations of this interface must implement sdk.NextBatcher, and can
 // optionally implement sdk.Closer and sdk.Progresser.
@@ -85,44 +80,12 @@ type BaseInstance struct {
 	plugins.BaseProgress
 }
 
-// Register registers a Plugin source plugin in the framework. This function
-// needs to be called in a Go init() function. Calling this function more than
-// once will cause a panic.
+// Register registers the event sourcing capability in the framework for the given Plugin.
 //
-// Register registers a source plugin in the SDK. In order to
-// register a source plugin with optional extraction capabilities, the
-// extractor.Register function must be called by passing the same Plugin
-// argument. In this case, the order in which Register and extractor.Register
-// are called in the init() function is not relevant. This is needed for the
-// framework to notice that the source plugin implements the extraction-related
-// methods.
+// This function should be called from the provided plugins.FactoryFunc implementation.
+// See the parent package for more detail. This function is idempotent.
 func Register(p Plugin) {
-	if registered {
-		panic("plugin-sdk-go/sdk/plugins/source: register can be called only once")
-	}
-
-	i := p.Info()
-	info.SetType(sdk.TypeSourcePlugin)
-	info.SetId(i.ID)
-	info.SetName(i.Name)
-	info.SetDescription(i.Description)
-	info.SetEventSource(i.EventSource)
-	info.SetContact(i.Contact)
-	info.SetVersion(i.Version)
-	info.SetRequiredAPIVersion(i.RequiredAPIVersion)
-	info.SetExtractEventSources(i.ExtractEventSources)
-	if initSchema, ok := p.(sdk.InitSchema); ok {
-		initschema.SetInitSchema(initSchema.InitSchema())
-	}
-
-	initialize.SetOnInit(func(c string) (sdk.PluginState, error) {
-		err := p.Init(c)
-		return p, err
-	})
-
 	open.SetOnOpen(func(c string) (sdk.InstanceState, error) {
 		return p.Open(c)
 	})
-
-	registered = true
 }

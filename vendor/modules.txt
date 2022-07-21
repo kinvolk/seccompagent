@@ -11,7 +11,7 @@ github.com/coreos/go-systemd/v22/dbus
 github.com/cyphar/filepath-securejoin
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/falcosecurity/plugin-sdk-go v0.1.0
+# github.com/falcosecurity/plugin-sdk-go v0.4.0
 ## explicit
 github.com/falcosecurity/plugin-sdk-go/pkg/cgo
 github.com/falcosecurity/plugin-sdk-go/pkg/ptr

@@ -20,6 +20,13 @@ limitations under the License.
 #include <sys/time.h>
 #include "extract.h"
 
+// Possibly oversimplified version of https://gcc.gnu.org/wiki/Visibility
+#if defined _WIN32 || defined __CYGWIN__
+#define FALCO_PLUGIN_SDK_PUBLIC __declspec(dllexport)
+#else
+#define FALCO_PLUGIN_SDK_PUBLIC
+#endif
+
 enum worker_state
 {
 	WAIT = 0,
@@ -74,7 +81,7 @@ static inline int32_t async_extract_request(ss_plugin_t *s,
 // This is the plugin API function. If s_async_extractor_ctx is
 // non-NULL, it calls the async extractor function. Otherwise, it
 // calls the synchronous extractor function.
-int32_t plugin_extract_fields(ss_plugin_t *s,
+FALCO_PLUGIN_SDK_PUBLIC int32_t plugin_extract_fields(ss_plugin_t *s,
 							  const ss_plugin_event *evt,
 							  uint32_t num_fields,
 							  ss_plugin_extract_field *fields)

@@ -49,7 +49,7 @@ func plugin_extract_fields_sync(plgState C.uintptr_t, evt *C.ss_plugin_event, nu
 	var i uint32
 	var extrReq sdk.ExtractRequest
 	for i = 0; i < numFields; i++ {
-		flds[i].field_present = false
+		flds[i].res_len = (C.uint64_t)(0)
 		extrReq = extrReqs.ExtractRequests().Get(int(flds[i].field_id))
 		extrReq.SetPtr(unsafe.Pointer(&flds[i]))
 

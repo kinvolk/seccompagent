@@ -101,6 +101,7 @@ func plugin_close(plgState C.uintptr_t, instanceState C.uintptr_t) {
 		}
 		if state, ok := handle.Value().(sdk.Events); ok {
 			state.Events().Free()
+			state.SetEvents(nil)
 		}
 		handle.Delete()
 	}

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"os"
@@ -53,21 +52,23 @@ type SeccompAgentInstance struct {
 
 // init function is used for referencing our plugin to the Falco plugin framework
 func init() {
-	p := &SeccompAgentPlugin{}
-	extractor.Register(p)
-	source.Register(p)
+	plugins.SetFactory(func() plugins.Plugin {
+		p := &SeccompAgentPlugin{}
+		extractor.Register(p)
+		source.Register(p)
+		return p
+	})
 }
 
 // Info displays information of the plugin to Falco plugin framework
 func (seccompAgentPlugin *SeccompAgentPlugin) Info() *plugins.Info {
 	return &plugins.Info{
-		ID:                 6,
-		Name:               "seccompagent",
-		Description:        "Seccomp Agent Events",
-		Contact:            "github.com/kinvolk/seccompagent/",
-		Version:            "0.1.0",
-		RequiredAPIVersion: "0.3.0",
-		EventSource:        "seccompagent",
+		ID:          6,
+		Name:        "seccompagent",
+		Description: "Seccomp Agent Events",
+		Contact:     "github.com/kinvolk/seccompagent/",
+		Version:     "0.2.0",
+		EventSource: "seccompagent",
 	}
 }
 
@@ -165,8 +166,8 @@ func (seccompAgentPlugin *SeccompAgentPlugin) Open(params string) (source.Instan
 
 // String represents the raw value of on event
 // (not currently used by Falco plugin framework, only there for future usage)
-func (seccompAgentPlugin *SeccompAgentPlugin) String(in io.ReadSeeker) (string, error) {
-	evtBytes, err := ioutil.ReadAll(in)
+func (seccompAgentPlugin *SeccompAgentPlugin) String(evt sdk.EventReader) (string, error) {
+	evtBytes, err := ioutil.ReadAll(evt.Reader())
 	if err != nil {
 		return "", err
 	}
@@ -205,7 +206,7 @@ func (seccompAgentInstance *SeccompAgentInstance) NextBatch(pState sdk.PluginSta
 }
 
 func (seccompAgentInstance *SeccompAgentInstance) Close() {
-        // TODO: Check if we need to close the channels on the sender side (not here)?
+	// TODO: Check if we need to close the channels on the sender side (not here)?
 	seccompAgentInstance.ctx.Done()
 }
 

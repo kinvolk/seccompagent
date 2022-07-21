@@ -16,10 +16,6 @@ limitations under the License.
 
 package cgo
 
-import (
-	"sync/atomic"
-)
-
 // Handle is an alternative implementation of cgo.Handle introduced by
 // Go 1.17, see https://pkg.go.dev/runtime/cgo. This implementation
 // optimizes performance in use cases related to plugins. It is intended
@@ -32,42 +28,62 @@ import (
 // an integer type that is large enough to hold the bit pattern of any pointer.
 // The zero value of a Handle is not valid and thus is safe to use as
 // a sentinel in C APIs.
-
-// The performance optimization comes with a limitation: the maximum number
-// of handles is capped to a fixed value (see MaxHandle). However, since
-// the intended usage is to pass opaque pointers holding the plugin states
-// (usually at most two pointers per one instance of a plugin), this hard limit
-// is considered acceptable. The usage in other contexts is discuraged.
 //
+// The performance optimization comes with a limitation: the maximum number
+// of valid handles is capped to a fixed value (see MaxHandle).
+// However, since the intended usage is to pass opaque pointers holding the
+// plugin states (usually at most two pointers per one instance of a plugin),
+// this hard limit is considered acceptable.
+//
+// The thread-safety guarantees have been dropped for further
+// performance improvements. The current version of the Plugin API does not
+// require thread safety.
+//
+// The usage in other contexts is discuraged.
 type Handle uintptr
 
-// The max number of handle that can be created.
+// MaxHandle is the largest value that an Handle can hold
 const MaxHandle = 32 - 1
+
+var (
+	handles  [MaxHandle + 1]interface{} // [int]interface{}
+	noHandle int                        = 0
+)
+
+func init() {
+	resetHandles()
+}
 
 // NewHandle returns a handle for a given value.
 //
 // The handle is valid until the program calls Delete on it. The handle
 // uses resources, and this package assumes that C code may hold on to
 // the handle, so a program must explicitly call Delete when the handle
-// is no longer needed.
+// is no longer needed. Programs must not retain deleted handles.
 //
 // The intended use is to pass the returned handle to C code, which
 // passes it back to Go, which calls Value.
 //
-// This function panics if called more than MaxHandle times.
+// The simultaneous number of the valid handles cannot exceed MaxHandle.
+// This function panics if there are no more handles available.
+// Previously created handles may be made available again when
+// invalidated with Delete.
+//
+// This function is not thread-safe.
 func NewHandle(v interface{}) Handle {
-	h := atomic.AddUintptr(&handleIdx, 1)
-	if h > MaxHandle {
-		panic("plugin-sdk-go/cgo: ran out of handle space")
+	for i := 1; i <= MaxHandle; i++ {
+		if handles[i] == &noHandle {
+			handles[i] = v
+			return Handle(i)
+		}
 	}
-
-	handles[h] = v
-	return Handle(h)
+	panic("plugin-sdk-go/cgo: ran out of handle space")
 }
 
 // Value returns the associated Go value for a valid handle.
 //
 // The method panics if the handle is invalid.
+// This function is not thread-safe.
 func (h Handle) Value() interface{} {
 	if h > MaxHandle || handles[h] == &noHandle {
 		panic("plugin-sdk-go/cgo: misuse of an invalid Handle")
@@ -80,6 +96,7 @@ func (h Handle) Value() interface{} {
 // no longer has a copy of the handle value.
 //
 // The method panics if the handle is invalid.
+// This function is not thread-safe.
 func (h Handle) Delete() {
 	if h > MaxHandle || handles[h] == &noHandle {
 		panic("plugin-sdk-go/cgo: misuse of an invalid Handle")
@@ -88,18 +105,7 @@ func (h Handle) Delete() {
 }
 
 func resetHandles() {
-	handleIdx = 0
 	for i := 0; i <= MaxHandle; i++ {
 		handles[i] = &noHandle
 	}
-}
-
-var (
-	handles   [MaxHandle + 1]interface{} // [int]interface{}
-	handleIdx uintptr                    // atomic
-	noHandle  int
-)
-
-func init() {
-	resetHandles()
 }

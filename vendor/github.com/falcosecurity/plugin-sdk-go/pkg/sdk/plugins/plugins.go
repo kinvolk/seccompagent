@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2021 The Falco Authors.
+Copyright (C) 2022 The Falco Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +19,9 @@ package plugins
 import (
 	"github.com/falcosecurity/plugin-sdk-go/pkg/ptr"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk"
+	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/info"
+	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initialize"
+	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initschema"
 )
 
 // Info is a struct containing the general information about a plugin.
@@ -132,4 +135,63 @@ type BasePlugin struct {
 	BaseStringer
 	BaseExtractRequests
 	BaseOpenParams
+}
+
+// FactoryFunc creates a new Plugin
+type FactoryFunc func() Plugin
+
+// SetFactory sets the FactoryFunc to be used by the SDK when creating a new Plugin
+//
+// SetFactory should be called in the Go init() function of the plugin main package.
+// It hooks the plugin framework initialization stage to create a new Plugin and
+// to set up common facilities provided by this SDK. The given FactoryFunc must create
+// a Plugin and can optionally enable plugin capabilities by using the Register functions
+// provided by sub-packages. This function is idempotent.
+//
+// Usage example:
+//
+//	package main
+//
+//	import (
+//		"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
+//		"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins/extractor"
+//		"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins/source"
+//	)
+//
+//	func init() {
+//		plugins.SetFactory(func() plugins.Plugin {
+//			p := &MyPlugin{} // create a new Plugin
+//			source.Register(p) // enable event sourcing capability
+//			extractor.Register(p) // enable field extraction capability
+//			return p
+//		})
+//	}
+//
+func SetFactory(f FactoryFunc) {
+
+	// Create a new plugin instance to get static plugin info
+	p := f()
+
+	// Set up plugin info
+	i := p.Info()
+	info.SetId(i.ID)
+	info.SetName(i.Name)
+	info.SetDescription(i.Description)
+	info.SetEventSource(i.EventSource)
+	info.SetExtractEventSources(i.ExtractEventSources)
+	info.SetContact(i.Contact)
+	info.SetVersion(i.Version)
+	info.SetRequiredAPIVersion(i.RequiredAPIVersion)
+
+	// Set up plugin init schema, if any
+	if initSchema, ok := p.(sdk.InitSchema); ok {
+		initschema.SetInitSchema(initSchema.InitSchema())
+	}
+
+	initialize.SetOnInit(func(c string) (sdk.PluginState, error) {
+		// Create a new plugin instance
+		p := f()
+		err := p.Init(c)
+		return p, err
+	})
 }

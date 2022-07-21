@@ -40,8 +40,7 @@ type StringBuffer interface {
 	// (C.free or similars) can lead to undefined behavior.
 	CharPtr() unsafe.Pointer
 	//
-	// Free deallocates the underlying C-allocated buffer. The behavior of Free
-	// after the first call is undefined.
+	// Free deallocates the underlying C-allocated buffer.
 	Free()
 }
 

@@ -16,8 +16,6 @@ limitations under the License.
 
 package sdk
 
-import "io"
-
 // PluginState represents the state of a plugin returned by plugin_init().
 type PluginState interface {
 }
@@ -47,12 +45,13 @@ type Destroyer interface {
 }
 
 // Stringer is an interface wrapping the basic String method.
-// String takes a io.ReadSeeker byte input and produces a string representation
+// String takes an EventReader and produces a string representation
 // describing its internal data. This is meant to be used in
-// plugin_event_to_string(), where the byte input represents event data
-// provided by the framework and previouly produced by the plugin_next_batch().
+// plugin_event_to_string(), where the event is provided by the framework
+// and previouly produced by an invocation of plugin_next_batch() of this
+// plugin.
 type Stringer interface {
-	String(in io.ReadSeeker) (string, error)
+	String(evt EventReader) (string, error)
 }
 
 // Extractor is an interface wrapping the basic Extract method.

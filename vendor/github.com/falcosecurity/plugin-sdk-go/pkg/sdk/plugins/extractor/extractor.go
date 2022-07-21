@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2021 The Falco Authors.
+Copyright (C) 2022 The Falco Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package extractor provides high-level constructs to easily build
-// extractor plugins.
+// plugins with field extraction capability.
 package extractor
 
 import (
@@ -25,15 +25,10 @@ import (
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/plugins"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/extract"
 	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/fields"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/info"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initialize"
-	"github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/initschema"
 	_ "github.com/falcosecurity/plugin-sdk-go/pkg/sdk/symbols/lasterr"
 )
 
-var registered = false
-
-// Plugin is an interface representing an extractor plugin.
+// Plugin is an interface representing a plugin with field extraction capability.
 type Plugin interface {
 	plugins.Plugin
 	sdk.Extractor
@@ -43,57 +38,21 @@ type Plugin interface {
 	Fields() []sdk.FieldEntry
 }
 
-// Register registers a Plugin extractor plugin in the framework. This function
-// needs to be called in a Go init() function. Calling this function more than
-// once will cause a panic.
-//
-// Register can also be called to register source plugins with optional
-// extraction capabilities. If this function is called before, or after, having
-// registered a source plugin in the SDK, the registered plugin will be a
-// plugin of type sdk.TypeSourcePlugin with extraction capabilities enabled.
-func Register(p Plugin) {
-	if registered {
-		panic("plugin-sdk-go/sdk/plugins/extractor: register can be called only once")
-	}
+func enableAsync(handle cgo.Handle) {
+	extract.StartAsync()
+	hooks.SetOnBeforeDestroy(func(handle cgo.Handle) {
+		extract.StopAsync()
+	})
+}
 
-	// Currently TypeExtractorPlugin is also compatible with source plugins
-	// that export extract-related symbols.
-	switch info.Type() {
-	case 0:
-		info.SetType(sdk.TypeExtractorPlugin)
-	case sdk.TypeExtractorPlugin:
-	case sdk.TypeSourcePlugin: // source plugins have the priority over extractor plugins
-		break
-	default:
-		panic("plugin-sdk-go/sdk/plugins/extractor: unsupported type has already been set")
-	}
-	i := p.Info()
-	info.SetId(i.ID)
-	info.SetName(i.Name)
-	info.SetDescription(i.Description)
-	info.SetEventSource(i.EventSource)
-	info.SetContact(i.Contact)
-	info.SetVersion(i.Version)
-	info.SetRequiredAPIVersion(i.RequiredAPIVersion)
-	info.SetExtractEventSources(i.ExtractEventSources)
-	if initSchema, ok := p.(sdk.InitSchema); ok {
-		initschema.SetInitSchema(initSchema.InitSchema())
-	}
+// Register registers the field extraction capability in the framework for the given Plugin.
+//
+// This function should be called from the provided plugins.FactoryFunc implementation.
+// See the parent package for more detail. This function is idempotent.
+func Register(p Plugin) {
 
 	fields.SetFields(p.Fields())
 
-	initialize.SetOnInit(func(c string) (sdk.PluginState, error) {
-		err := p.Init(c)
-		return p, err
-	})
-
 	// setup hooks for automatically start/stop async extraction
-	hooks.SetOnAfterInit(func(handle cgo.Handle) {
-		extract.StartAsync()
-		hooks.SetOnBeforeDestroy(func(handle cgo.Handle) {
-			extract.StopAsync()
-		})
-	})
-
-	registered = true
+	hooks.SetOnAfterInit(enableAsync)
 }

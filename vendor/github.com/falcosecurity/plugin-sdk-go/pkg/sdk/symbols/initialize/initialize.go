@@ -119,6 +119,7 @@ func plugin_destroy(pState C.uintptr_t) {
 		}
 		if state, ok := handle.Value().(sdk.ExtractRequests); ok {
 			state.ExtractRequests().Free()
+			state.SetExtractRequests(nil)
 		}
 		if state, ok := handle.Value().(sdk.LastErrorBuffer); ok {
 			state.LastErrorBuffer().Free()
@@ -129,7 +130,6 @@ func plugin_destroy(pState C.uintptr_t) {
 		if state, ok := handle.Value().(sdk.ProgressBuffer); ok {
 			state.ProgressBuffer().Free()
 		}
-
 		handle.Delete()
 	}
 }
