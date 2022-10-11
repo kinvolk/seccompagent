@@ -42,6 +42,7 @@ chmod: /: Bad message
 ```
 
 ## Demo on Kubernetes
+Before you install the demo on k8s, please ensure all [the requirements](./docs/install.md) are satisfied
 
 This demo shows that the Seccomp Agent can have different behaviour depending on the Kubernetes pod (in this case, the pod's namespace and name).
 
