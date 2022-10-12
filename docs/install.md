@@ -9,17 +9,29 @@ Seccomp Agent is a DaemonSet deployed in the cluster and relies on new features 
 
 ## Installing Seccomp Agent
 
-Requirements:
-- Linux >= 5.9
-- libseccomp >= 2.5.2
-- runc >= 1.1.0
-- containerd >= 1.5.5
+System Requirements:
+- Linux kernel >= 5.9
+- Libseccomp >= 2.5.2 (>=2.5.2 recommended)
+- Runc >= 1.1.0
+- Docker from git(needs to include [this PR](https://github.com/moby/moby/pull/42604))
+- Or if you are using containerd instead of docker, containerd >=1.5.5(>=1.6.0-rc.1 recommended)
 
 Recommended:
 - Flatcar Container Linux >= 3127.0.0
 - containerd >= 1.6.0-rc1
 - Security Profiles Operator (SPO) >= v0.4.1 (unreleased) or from git main
 
+To ensure you have installed correct version of container runtime that support seccomp notify, 
+use the command below:
+```
+strings $(which dockerd) | grep listenerPath
+```
+or if you are using containerd as your runtime
+```
+strings $(which containerd) | grep listenerPath
+```
+If the output is empty, it means your container runtime haven't enabled the feature of seccomp notify. 
+Please check the requirements again in case you missed one.
 ### With Typhoon on Azure
 
 In the `docs/terraform` directory, you can find terraform files to start a
