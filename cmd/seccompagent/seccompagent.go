@@ -20,6 +20,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"text/template"
@@ -33,6 +34,8 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/registry"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -41,12 +44,14 @@ var (
 	socketFile    string
 	resolverParam string
 	logflags      string
+	monitorListen string
 )
 
 func init() {
 	flag.StringVar(&socketFile, "socketfile", "/run/seccomp-agent.socket", "Socket file")
 	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes]")
 	flag.StringVar(&logflags, "log", "info", "log level [trace,debug,info,warn,error,fatal,color,nocolor,json]")
+	flag.StringVar(&monitorListen, "monitor-listen", "", "[host]:port to listen on for monitoring, empty means no monitoring port")
 }
 
 func main() {
@@ -71,6 +76,19 @@ func main() {
 	if flag.NArg() > 0 {
 		flag.PrintDefaults()
 		panic(errors.New("invalid command"))
+	}
+
+	if monitorListen != "" {
+		reg := prometheus.DefaultRegisterer
+		reg.MustRegister(prometheus.NewBuildInfoCollector())
+		http.Handle("/metrics", promhttp.Handler())
+
+		go func() {
+			err := http.ListenAndServe(monitorListen, nil)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
 	}
 
 	var resolver registry.ResolverFunc
