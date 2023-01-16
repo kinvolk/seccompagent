@@ -29,6 +29,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/agent"
 	"github.com/kinvolk/seccompagent/pkg/handlers"
 	"github.com/kinvolk/seccompagent/pkg/handlers/falco"
+	prometheus_handler "github.com/kinvolk/seccompagent/pkg/handlers/prometheus"
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/registry"
@@ -141,6 +142,8 @@ func main() {
 					switch middleware {
 					case "falco":
 						r.MiddlewareHandlers = append(r.MiddlewareHandlers, falco.NotifyFalco(podCtx))
+					case "prometheus":
+						r.MiddlewareHandlers = append(r.MiddlewareHandlers, prometheus_handler.UpdateMetrics(podCtx))
 					default:
 						log.WithFields(log.Fields{
 							"pod":        podCtx,
