@@ -45,14 +45,14 @@ var (
 	socketFile    string
 	resolverParam string
 	logflags      string
-	monitorListen string
+	metricsBindAddress string
 )
 
 func init() {
 	flag.StringVar(&socketFile, "socketfile", "/run/seccomp-agent.socket", "Socket file")
 	flag.StringVar(&resolverParam, "resolver", "", "Container resolver to use [none, demo-basic, kubernetes]")
 	flag.StringVar(&logflags, "log", "info", "log level [trace,debug,info,warn,error,fatal,color,nocolor,json]")
-	flag.StringVar(&monitorListen, "monitor-listen", "", "[host]:port to listen on for monitoring, empty means no monitoring port")
+	flag.StringVar(&metricsBindAddress, "metrics-bind-address", "", "[host]:port to listen on for monitoring, empty means no monitoring port")
 }
 
 func main() {
@@ -79,13 +79,13 @@ func main() {
 		panic(errors.New("invalid command"))
 	}
 
-	if monitorListen != "" {
+	if metricsBindAddress != "" {
 		reg := prometheus.DefaultRegisterer
 		reg.MustRegister(prometheus.NewBuildInfoCollector())
 		http.Handle("/metrics", promhttp.Handler())
 
 		go func() {
-			err := http.ListenAndServe(monitorListen, nil)
+			err := http.ListenAndServe(metricsBindAddress, nil)
 			if err != nil {
 				log.Fatal(err)
 			}
