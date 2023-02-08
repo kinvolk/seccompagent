@@ -24,21 +24,8 @@ import (
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	log "github.com/sirupsen/logrus"
-)
 
-const (
-	// containerd annotations
-	// https://github.com/containerd/containerd/blob/master/pkg/cri/annotations/annotations.go
-
-	containerdContainerName = "io.kubernetes.cri.container-name"
-
-	// cri-o annotations
-	// https://github.com/containers/podman/blob/master/pkg/annotations/annotations.go
-
-	crioContainerType = "io.kubernetes.cri-o.ContainerType"
-	crioContainerName = "io.kubernetes.cri-o.ContainerName"
-	crioPodName       = "io.kubernetes.cri-o.Name"
-	crioPodNamespace  = "io.kubernetes.cri-o.Namespace"
+	ociannotations "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/oci-annotations"
 )
 
 type PodContext struct {
@@ -84,15 +71,18 @@ func readAnnotations(ann map[string]string) (podCtx *PodContext) {
 	if ann == nil {
 		return
 	}
-	if val, ok := ann[crioPodNamespace]; ok {
+
+	annResolver, err := ociannotations.NewResolverFromAnnotations(ann)
+	if err != nil {
+		return
+	}
+	if val := annResolver.PodNamespace(ann); val != "" {
+		podCtx.Namespace = val
+	}
+	if val := annResolver.PodName(ann); val != "" {
 		podCtx.Pod = val
 	}
-	if val, ok := ann[crioPodName]; ok {
-		podCtx.Pod = val
-	}
-	if val, ok := ann[containerdContainerName]; ok {
-		podCtx.Container = val
-	} else if val, ok := ann[crioContainerName]; ok {
+	if val := annResolver.ContainerName(ann); val != "" {
 		podCtx.Container = val
 	}
 	return
