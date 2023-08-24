@@ -3,7 +3,7 @@ module github.com/kinvolk/seccompagent
 go 1.18
 
 require (
-	github.com/falcosecurity/plugin-sdk-go v0.4.0
+	github.com/falcosecurity/plugin-sdk-go v0.7.1
 	github.com/inspektor-gadget/inspektor-gadget v0.12.1
 	github.com/opencontainers/runc v1.1.0
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417

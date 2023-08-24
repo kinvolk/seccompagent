@@ -8,8 +8,21 @@ RUN cd /src && go mod download
 COPY ./ /src
 RUN cd /src && make -C falco-plugin
 
-# Use the following command to get the built files:
-# DOCKER_BUILDKIT=1 docker build -f falco-plugin/Dockerfile --output=falco-plugin/ .
-FROM scratch AS deploy-source
-COPY --from=builder /src/falco-plugin/*.so /
+FROM falcosecurity/falco-no-driver:0.35.1
+
+SHELL ["/bin/bash", "-c"]
+
+COPY falco-plugin/falco-config-plugin-snippet.yaml /etc/falco/
+COPY falco-plugin/seccomp_agent_rules.yaml /etc/falco/rules.d/
+
+RUN \
+    SNIPPET="$(jq -Rs . < /etc/falco/falco-config-plugin-snippet.yaml)" && \
+    SNIPPET="${SNIPPET:1}" && \
+    SNIPPET="${SNIPPET/%?/}" && \
+	sed -i \
+	-e '/^plugins:$/a \'"$SNIPPET" \
+	-e 's/^load_plugins:.*$/load_plugins: [seccompagent]/' \
+	/etc/falco/falco.yaml && \
+    rm -f /etc/falco/falco-config-plugin-snippet.yaml
+COPY --from=builder /src/falco-plugin/*.so /usr/share/falco/plugins/
 

@@ -1,0 +1,5 @@
+  - name: seccompagent
+    library_path: libseccompagent.so
+    init_config:
+      socketFile: /run/seccomp-agent-falco-plugin/seccomp-agent-falco-plugin.sock
+      flushInterval: 30
