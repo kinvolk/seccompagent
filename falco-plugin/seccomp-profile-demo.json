@@ -1,0 +1,16 @@
+{
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "architectures": [
+    "SCMP_ARCH_X86_64"
+  ],
+  "listenerPath": "/run/seccomp-agent.socket",
+  "listenerMetadata": "MIDDLEWARE=falco",
+  "syscalls": [
+    {
+      "action": "SCMP_ACT_NOTIFY",
+      "names": [
+        "mkdir"
+      ]
+    }
+  ]
+}

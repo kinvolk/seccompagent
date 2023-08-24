@@ -42,9 +42,9 @@ import (
 )
 
 var (
-	socketFile    string
-	resolverParam string
-	logflags      string
+	socketFile         string
+	resolverParam      string
+	logflags           string
 	metricsBindAddress string
 )
 
@@ -97,6 +97,16 @@ func main() {
 	switch resolverParam {
 	case "none", "":
 		resolver = nil
+	case "falco":
+		resolver = func(state *specs.ContainerProcessState) *registry.Registry {
+			r := registry.New()
+			podCtx := &kuberesolver.PodContext{
+				Pid:  state.State.Pid,
+				Pid1: state.Pid,
+			}
+			r.MiddlewareHandlers = append(r.MiddlewareHandlers, falco.NotifyFalco(podCtx))
+			return r
+		}
 	case "demo-basic":
 		// Using the resolver allows to implement different behaviour
 		// depending on the container. For example, you could connect to the

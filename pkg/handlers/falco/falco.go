@@ -18,16 +18,17 @@ import (
 	"context"
 	"time"
 
-	pb "github.com/kinvolk/seccompagent/falco-plugin/api"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+
+	pb "github.com/kinvolk/seccompagent/falco-plugin/api"
 
 	"github.com/kinvolk/seccompagent/pkg/kuberesolver"
 	"github.com/kinvolk/seccompagent/pkg/registry"
 )
 
-const socketfile = "/run/seccomp-agent-falco-plugin.sock"
+const socketfile = "/run/seccomp-agent-falco-plugin/seccomp-agent-falco-plugin.sock"
 
 func NotifyFalco(podCtx *kuberesolver.PodContext) func(h registry.HandlerFunc) registry.HandlerFunc {
 	return func(h registry.HandlerFunc) registry.HandlerFunc {
@@ -77,11 +78,16 @@ func NotifyFalco(podCtx *kuberesolver.PodContext) func(h registry.HandlerFunc) r
 				}).Error("Error in sending event to Falco")
 			}
 
-			r := h(fd, req)
+			var r registry.HandlerResult
+			if h != nil {
+				r = h(fd, req)
+			} else {
+				r = registry.HandlerResultContinue()
+			}
 
 			log.WithFields(log.Fields{
 				"pod": podCtx,
-			}).Error("Falco middleware completed")
+			}).Debug("Falco middleware completed")
 			return r
 		}
 	}
