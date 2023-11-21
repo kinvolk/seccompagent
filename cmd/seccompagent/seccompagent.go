@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build linux && cgo
 // +build linux,cgo
 
 package main
@@ -121,7 +122,7 @@ func main() {
 			// 	/ # ls /root/self/cmdline
 			// 	/root/self/cmdline
 			allowedFilesystems := map[string]struct{}{"proc": struct{}{}}
-			r.SyscallHandler["mount"] = handlers.Mount(allowedFilesystems)
+			r.SyscallHandler["mount"] = handlers.Mount(allowedFilesystems, false /* do not check capabilities */)
 
 			// Example:
 			// 	# chmod 777 /
@@ -214,8 +215,19 @@ func main() {
 			if v, ok := metadata["MOUNT_SYSFS"]; ok && v == "true" {
 				allowedFilesystems["sysfs"] = struct{}{}
 			}
+			if v, ok := metadata["MOUNT_OTHER_FS_LIST"]; ok {
+				for _, fs := range strings.Split(v, ",") {
+					allowedFilesystems[fs] = struct{}{}
+				}
+			}
+
+			requireCapsForMount := false
+			if v, ok := metadata["MOUNT_NEED_CAP_ADMIN"]; ok && v == "true" {
+				requireCapsForMount = true
+			}
+
 			if len(allowedFilesystems) > 0 {
-				r.SyscallHandler["mount"] = handlers.Mount(allowedFilesystems)
+				r.SyscallHandler["mount"] = handlers.Mount(allowedFilesystems, requireCapsForMount)
 			}
 			return r
 		}
