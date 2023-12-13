@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build linux && cgo
 // +build linux,cgo
 
 package handlers
@@ -28,6 +29,7 @@ import (
 	"github.com/kinvolk/seccompagent/pkg/nsenter"
 	"github.com/kinvolk/seccompagent/pkg/readarg"
 	"github.com/kinvolk/seccompagent/pkg/registry"
+	"github.com/kinvolk/seccompagent/pkg/userns"
 )
 
 var _ = nsenter.RegisterModule("mount", runMountInNamespaces)
@@ -37,6 +39,8 @@ type mountModuleParams struct {
 	Source     string `json:"source,omitempty"`
 	Dest       string `json:"dest,omitempty"`
 	Filesystem string `json:"filesystem,omitempty"`
+	Flags      int64  `json:"flags,omitempty"`
+	Options    string `json:"options,omitempty"`
 }
 
 func runMountInNamespaces(param []byte) string {
@@ -46,14 +50,14 @@ func runMountInNamespaces(param []byte) string {
 		return fmt.Sprintf("%d", int(unix.ENOSYS))
 	}
 
-	err = unix.Mount(params.Source, params.Dest, params.Filesystem, 0, "")
+	err = unix.Mount(params.Source, params.Dest, params.Filesystem, 0, params.Options)
 	if err != nil {
 		return fmt.Sprintf("%d", int(err.(unix.Errno)))
 	}
 	return "0"
 }
 
-func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
+func Mount(allowedFilesystems map[string]struct{}, requireUserNamespaceAdmin bool) registry.HandlerFunc {
 	return func(fd libseccomp.ScmpFd, req *libseccomp.ScmpNotifReq) (result registry.HandlerResult) {
 		memFile, err := readarg.OpenMem(req.Pid)
 		if err != nil {
@@ -96,12 +100,17 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 			return registry.HandlerResultErrno(unix.EFAULT)
 		}
 
+		// We don't handle flags, we may want to consider allowing a few.
+		// This is here so the debug logging makes it possible to see flags used.
+		flags := int64(req.Data.Args[3])
+
 		log.WithFields(log.Fields{
 			"fd":         fd,
 			"pid":        req.Pid,
 			"source":     source,
 			"dest":       dest,
 			"filesystem": filesystem,
+			"flags":      flags,
 		}).Debug("Mount")
 
 		if _, ok := allowedFilesystems[filesystem]; !ok {
@@ -110,11 +119,70 @@ func Mount(allowedFilesystems map[string]struct{}) registry.HandlerFunc {
 			return registry.HandlerResultContinue()
 		}
 
+		var options string
+		if req.Data.Args[4] != 0/* NULL */ && filesystem != "sysfs" {
+			// Get options, we assume because this is specified in
+			// allowedFilesystems that the data argument to mount(2)
+			// is a string so this is safe now. We ignore options for sysfs, as it
+			// doesn't define options.
+			options, err = readarg.ReadString(memFile, int64(req.Data.Args[4]))
+			if err != nil {
+				log.WithFields(log.Fields{
+					"fd":  fd,
+					"pid": req.Pid,
+					"arg": 4,
+					"err": err,
+				}).Error("Cannot read argument")
+				return registry.HandlerResultErrno(unix.EFAULT)
+			}
+
+			// Log this at trace level only as it could have user credentials.
+			log.WithFields(log.Fields{
+				"fd":         fd,
+				"pid":        req.Pid,
+				"source":     source,
+				"dest":       dest,
+				"filesystem": filesystem,
+				"flags":      flags,
+				"options":    options,
+			}).Trace("Handle mount")
+		}
+
+		if requireUserNamespaceAdmin {
+			ok, err := userns.IsPIDAdminCapable(req.Pid)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"fd":  fd,
+					"pid": req.Pid,
+					"err": err,
+				}).Error("Cannot check user namespace capabilities")
+				return registry.HandlerResultErrno(unix.EFAULT)
+			}
+			if !ok {
+				log.WithFields(log.Fields{
+					"fd":  fd,
+					"pid": req.Pid,
+				}).Info("Mount attempted without CAP_SYS_ADMIN")
+				return registry.HandlerResultErrno(unix.EPERM)
+			}
+
+			// Ensure the notification is still valid after checking user namespace capabilities.
+			if err := libseccomp.NotifIDValid(fd, req.ID); err != nil {
+				log.WithFields(log.Fields{
+					"fd":  fd,
+					"req": req,
+					"err": err,
+				}).Debug("Notification no longer valid")
+				return registry.HandlerResultIntr()
+			}
+		}
+
 		params := mountModuleParams{
 			Module:     "mount",
 			Source:     source,
 			Dest:       dest,
 			Filesystem: filesystem,
+			Options:    options,
 		}
 
 		mntns, err := nsenter.OpenNamespace(req.Pid, "mnt")
